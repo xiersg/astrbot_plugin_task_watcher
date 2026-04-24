@@ -83,7 +83,7 @@ profile_default/
 ipython_config.py
 
 # pyenv
-#   For a library or package, you might want to ignore these files since the code is
+#   For a library or package, you might want to ignore these files since that code is
 #   intended to run in multiple environments; otherwise, check them in:
 # .python-version
 
@@ -119,7 +119,7 @@ ipython_config.py
 # pixi
 #   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
 #pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
+#   Pixi creates a virtual environment in a .pixi directory, just like venv module creates one
 #   in the .venv directory. It is recommended not to include this directory in version control.
 .pixi
 
@@ -206,15 +206,19 @@ marimo/_lsp/
 __marimo__/
 
 # Plugin-specific ignores
-# Development and internal documents
+# Development and internal documentation (not for public)
 PROJECT_STRUCTURE.md
 REFACTORING.md
 AI_CONFIG.md
 DEPLOYMENT_CHECKLIST.md
+FIX_IMPORT_ERROR.md
+GITIGNORE_INFO.md
+DIAGNOSE_AND_FIX.md
 
-# Test results
+# Test results and temporary files
 tests/test_results/
 tests/test_report.html
+*.log
 
 # Python cache
 *.pyc

@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+测试配置文件
+用于测试插件配置功能
+"""
+{
+    "github_token": "test_token_123456",
+    "data_directory": "./test_data",
+    "repositories": [
+        {
+            "owner": "test_owner",
+            "repo": "test_repo",
+            "branch": "main"
+        }
+    ]
+}

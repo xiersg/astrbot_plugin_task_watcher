@@ -1,0 +1,23 @@
+[
+    {
+        "id": "task_001",
+        "title": "实现用户登录功能",
+        "status": "pending",
+        "assigned_to": "user1",
+        "related_files": ["src/auth/login.py", "src/auth/user.py"]
+    },
+    {
+        "id": "task_002",
+        "title": "修复数据库连接问题",
+        "status": "pending",
+        "assigned_to": "user2",
+        "related_files": ["src/db/connection.py"]
+    },
+    {
+        "id": "task_003",
+        "title": "优化API响应时间",
+        "status": "pending",
+        "assigned_to": "user1",
+        "related_files": ["src/api/handler.py"]
+    }
+]

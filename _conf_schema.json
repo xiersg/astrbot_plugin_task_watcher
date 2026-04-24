@@ -1,0 +1,15 @@
+{
+  "github_token": {
+    "type": "string",
+    "description": "GitHub API Token",
+    "hint": "用于访问GitHub API，提高请求限制。在GitHub设置中生成Personal Access Token，权限需要repo或public_repo",
+    "default": "",
+    "obvious_hint": true
+  },
+  "data_directory": {
+    "type": "string",
+    "description": "数据存储目录",
+    "hint": "插件数据存储的相对路径",
+    "default": "data/task_watcher"
+  }
+}

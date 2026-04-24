@@ -29,17 +29,12 @@ from astrbot.core.utils.session_waiter import (
 )
 import astrbot.api.message_components as Comp
 
-# 导入自定义模块
-from core import (
-    GitHubAPIClient,
-    TaskBookParser,
-    AIAnalyzer,
-    TaskMatcher,
-    FileUtils,
-    DataFormatter,
-    ConfigUtils,
-    Validator
-)
+# 导入自定义模块（使用完整包名避免与其他插件冲突）
+from astrbot_plugin_task_watcher.core.github_client import GitHubAPIClient
+from astrbot_plugin_task_watcher.core.task_parser import TaskBookParser
+from astrbot_plugin_task_watcher.core.ai_analyzer import AIAnalyzer
+from astrbot_plugin_task_watcher.core.task_matcher import TaskMatcher
+from astrbot_plugin_task_watcher.core.utils import FileUtils, DataFormatter, ConfigUtils, Validator
 
 
 @register("astrbot_plugin_task_watcher", "xiersg", "检测Git仓库变化，分析任务完成情况并自动汇报", "1.0.0")

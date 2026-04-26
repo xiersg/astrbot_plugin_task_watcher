@@ -1,0 +1,8 @@
+{
+  "data_directory": {
+    "type": "string",
+    "description": "数据存储目录",
+    "hint": "插件数据存储的相对路径",
+    "default": "data/task_watcher"
+  }
+}

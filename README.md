@@ -2,103 +2,60 @@
 
 检测 Git 仓库代码变更，自动分析任务完成进度并生成汇报。
 
-![插件截图-任务汇报](docs/images/report.png)
+![插件截图](http://xitm.xyz/markdown/readme%E7%94%A8%E5%9B%BE%E7%89%87/astrbot_plugin_task_watcher/2026-04-27-20-35-52_55ca1bde.png)
+
+## 快速开始
+
+### 第一步：准备任务书
+
+在 GitHub [Gist](https://gist.github.com/) 创建任务书：
+
+[内容示例](https://gist.github.com/xiersg/5af0f41f97a896bd2d8a85c52a5b2871)
+
+### 第二步：配置插件
+
+```bash
+# 1. 设置 GitHub Token（用于访问 Gist）
+/watcher set_token ghp_xxxxxxxx
+# Token 获取: https://github.com/settings/tokens（需 gist 权限）
+
+# 2. 设置任务书 Gist 链接（会自动下载内容）
+/watcher set_gist https://gist.github.com/用户名/gistID
+
+# 3. 设置要监视的仓库
+/watcher set_repo owner/repo
+```
+
+### 第三步：使用
+
+```bash
+/watcher check      # AI 检查代码，标记已完成任务
+/watcher organize   # AI 编排任务书格式
+/watcher watch      # 查看代码变更
+/watcher status     # 查看进度统计
+```
+
+---
 
 ## 功能
 
-- 监听 GitHub/本地 Git 仓库变更
+- 监听 GitHub 仓库代码变更
 - AI 智能分析任务完成度
-- 自动生成 Markdown 任务书
-- 任务书版本管理（Gist）
+- 任务书同步 Gist 版本管理
 
 ## 指令
 
-| 指令 | 别名 | 说明 |
-|------|------|------|
-| `/watcher help` | 帮助 | 显示帮助信息 |
-| `/watcher status` | 状态 | 查看配置状态 |
-| `/watcher check` | 检查/查看 | 检查任务完成情况 |
-| `/watcher report` | 汇报/报告 | 生成详细汇报 |
-| `/watcher organize` | 编排 | AI 编排任务书为 Markdown |
-| `/watcher upload_gist` | 上传 | 上传任务书到 Gist |
-| `/watcher set_token <token>` | - | 设置 GitHub Token |
-| `/watcher reset` | 重置 | 重置配置 |
-
-![指令演示](docs/images/commands.png)
-
-## 配置步骤
-
-### 1. 基础配置
-
-```bash
-# 设置仓库
-/watcher set_repo https://github.com/owner/repo
-
-# 上传任务书文件（支持 .json/.md/.yaml）
-/watcher set_taskbook
-
-# 或使用文本直接设置
-/watcher set_taskbook_text
-[粘贴任务书内容]
-
-# 启用 AI 分析
-/watcher set_ai y
-
-# 设置检查频率（秒，0 为手动）
-/watcher set_freq 3600
-```
-
-### 2. Gist 同步（可选）
-
-```bash
-# 设置 GitHub Token（用于上传 Gist）
-/watcher set_token ghp_xxxxxxxx
-
-# 上传任务书到 Gist
-/watcher upload_gist
-
-# 使用 AI 编排任务书格式
-/watcher organize
-```
-
-设置后，每次 `/watcher check` 会自动同步最新版本到 Gist。
-
-![配置流程](docs/images/setup.png)
-
-## 任务书格式
-
-### Markdown 格式
-
-```markdown
-# 项目任务书
-
-## 任务清单
-
-### 用户模块
-- [ ] 注册功能 (src/auth/register.py) - 0%
-- [x] 登录功能 (src/auth/login.py) - 100%
-
-### API 模块
-- [ ] 接口开发 (src/api/) - 30%
-```
-
-### JSON 格式
-
-```json
-{
-  "tasks": [
-    {"name": "注册功能", "related_path": "src/auth/register.py", "completion_rate": 0},
-    {"name": "登录功能", "related_path": "src/auth/login.py", "completion_rate": 100}
-  ]
-}
-```
-
-![任务书示例](docs/images/taskbook.png)
-
-## 依赖
-
-- `aiohttp>=3.8.0`
-- `PyYAML>=6.0`
+| 指令 | 说明 |
+|------|------|
+| `/watcher help` | 显示帮助 |
+| `/watcher config` | 查看当前配置 |
+| `/watcher set_token <token>` | 设置 GitHub Token |
+| `/watcher set_gist <url>` | 设置任务书 Gist 链接 |
+| `/watcher set_repo <repo>` | 设置监视的仓库 |
+| `/watcher check` | 检查任务完成情况 |
+| `/watcher organize` | AI 编排任务书格式 |
+| `/watcher watch` | 触发代码变更监视 |
+| `/watcher status` | 查看任务状态统计 |
 
 ## 许可证
 

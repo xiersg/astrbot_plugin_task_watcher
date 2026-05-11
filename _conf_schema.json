@@ -1,0 +1,20 @@
+{
+  "data_directory": {
+    "type": "string",
+    "description": "数据存储目录",
+    "hint": "插件数据存储的相对路径",
+    "default": "data/task_watcher"
+  },
+  "web_server_port": {
+    "type": "int",
+    "description": "插件在本机监听的 HTTP 端口（数字）；0 表示不启用网页。完整地址为 http://主机:该端口/ ，不是把整段 URL 填在这里",
+    "hint": "例如填 8765，浏览器访问 http://127.0.0.1:8765/（具体见 /watcher web 返回的链接）",
+    "default": 0
+  },
+  "web_server_host": {
+    "type": "string",
+    "description": "本地 Web 服务绑定地址",
+    "hint": "默认 127.0.0.1",
+    "default": "127.0.0.1"
+  }
+}

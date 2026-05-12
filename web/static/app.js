@@ -4,7 +4,7 @@
   const meta = document.getElementById("meta");
   const app = document.getElementById("app");
   const notice = document.getElementById("notice");
-  const toolbar = document.getElementById("toolbar");
+  const sidebar = document.getElementById("sidebar");
   const searchEl = document.getElementById("search");
   const tocEl = document.getElementById("toc");
 
@@ -17,82 +17,51 @@
     return d.innerHTML;
   }
 
+  function escAttr(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/\n/g, " ");
+  }
+
+  function safeDomId(id) {
+    return String(id || "task").replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
+
   function isBlank(s) {
     return !s || !String(s).trim();
   }
 
-  function parseTaskbookMarkdown(md) {
-    const lines = md.split(/\r?\n/);
-    const items = [];
-    const preamble = [];
-    let i = 0;
-
-    while (i < lines.length) {
-      const m = lines[i].match(/^##\s+(\d+)\.\s*(.*)$/);
-      if (m) {
-        const num = m[1];
-        const titleLine = m[2].trim();
-        i++;
-        const body = [];
-        while (i < lines.length && !/^##\s+\d+\./.test(lines[i])) {
-          body.push(lines[i]);
-          i++;
-        }
-        items.push({ num, title: titleLine, body: body.join("\n").trim() });
-        continue;
-      }
-      preamble.push(lines[i]);
-      i++;
+  function stripLeadingFence(text) {
+    let t = (text || "").trim();
+    if (t.startsWith("```")) {
+      const lines = t.split(/\n/);
+      if (lines.length && lines[0].startsWith("```")) lines.shift();
+      if (lines.length && lines[lines.length - 1].trim() === "```") lines.pop();
+      t = lines.join("\n").trim();
     }
-    return { preamble: preamble.join("\n").trim(), items };
+    return t;
   }
 
-  function bulletField(body, label) {
-    const re = new RegExp(
-      "^\\s*-\\s*\\*\\*" + label + "：\\*\\*\\s*(.*)$",
-      "im"
-    );
-    const m = body.match(re);
-    return m ? m[1].trim().replace(/^`+|`+$/g, "") : "";
+  function tryParseYamlTaskbook(raw) {
+    if (typeof jsyaml === "undefined") return null;
+    const text = stripLeadingFence(raw);
+    try {
+      const doc = jsyaml.load(text);
+      if (doc && doc.version === 1 && Array.isArray(doc.tree)) return doc;
+    } catch (_e) {}
+    return null;
   }
 
-  function extractContribution(body) {
-    return (
-      bulletField(body, "贡献") ||
-      bulletField(body, "贡献者") ||
-      bulletField(body, "主要贡献")
-    );
-  }
-
-  function extractCompletion(body) {
-    return (
-      bulletField(body, "具体完成了什么内容") ||
-      bulletField(body, "完成情况")
-    );
-  }
-
-  function stripKnownLines(body) {
-    return body
-      .split(/\r?\n/)
-      .filter(function (line) {
-        return !/^\s*-\s*\*\*(条目|具体完成了什么内容|完成情况|贡献|贡献者|主要贡献|关联路径)：\*\*/.test(
-          line
-        );
-      })
-      .join("\n")
-      .trim();
-  }
-
-  function itemSearchText(item) {
-    const body = item.body;
+  function yamlTaskSearchText(node) {
     return [
-      item.num,
-      item.title,
-      bulletField(body, "条目"),
-      bulletField(body, "关联路径"),
-      extractContribution(body),
-      extractCompletion(body),
-      stripKnownLines(body),
+      node.id,
+      node.title,
+      node.completion,
+      node.description,
+      node.contributors,
+      node.paths,
     ]
       .filter(function (x) {
         return x && String(x).trim();
@@ -101,28 +70,47 @@
       .toLowerCase();
   }
 
-  function renderItem(item) {
-    const body = item.body;
-    const entry = bulletField(body, "条目");
-    const paths = bulletField(body, "关联路径");
-    const contribution = extractContribution(body);
-    const completion = extractCompletion(body);
-    const stripKnown = stripKnownLines(body);
+  function yamlSectionSearchStack(stack) {
+    return stack.filter(Boolean).join(" ").toLowerCase();
+  }
+
+  function renderYamlTaskCard(node, depth, pathStack) {
+    const title = String(node.title || "（无标题）");
+    const sid = safeDomId(node.id);
+    const desc = String(node.description || "").trim();
+    const paths = String(node.paths || "").trim();
+    const contribution = String(node.contributors || "").trim();
+    const completion = String(node.completion || "").trim();
+    const crumb = pathStack.filter(Boolean).join(" / ");
 
     const contribEmpty = isBlank(contribution);
     const completeEmpty = isBlank(completion);
+    const descEmpty = isBlank(desc);
 
     const contribClass = "detail-body" + (contribEmpty ? " is-empty" : "");
     const completeClass = "detail-body" + (completeEmpty ? " is-empty" : "");
+    const descClass = "detail-body" + (descEmpty ? " is-empty" : "");
 
     const h = [];
-    h.push('<article class="card" id="task-' + item.num + '">');
+    h.push(
+      '<article class="card yaml-task" id="task-' +
+        sid +
+        '" data-depth="' +
+        depth +
+        '" data-search="' +
+        escAttr(yamlTaskSearchText(node)) +
+        '">'
+    );
     h.push('<div class="card-head">');
-    h.push("<h2>" + esc(item.num + ". " + (item.title || "（无标题）")) + "</h2>");
-    if (entry) {
-      h.push(
-        '<p class="field"><span class="label">条目</span>' + esc(entry) + "</p>"
-      );
+    h.push(
+      "<h2>" +
+        esc(title) +
+        '</h2><p class="task-id"><code>' +
+        esc(String(node.id || "")) +
+        "</code></p>"
+    );
+    if (crumb) {
+      h.push('<p class="field crumb"><span class="label">路径</span>' + esc(crumb) + "</p>");
     }
     if (paths) {
       h.push(
@@ -133,9 +121,13 @@
     }
     h.push("</div>");
 
-    h.push('<details class="item-details">');
-    h.push("<summary>贡献与完成情况</summary>");
+    h.push('<details class="item-details" open>');
+    h.push("<summary>描述、贡献与完成情况</summary>");
     h.push('<div class="detail-panel">');
+    h.push('<div class="detail-block">');
+    h.push("<h4>描述</h4>");
+    h.push('<div class="' + descClass + '">' + (descEmpty ? "" : esc(desc)) + "</div>");
+    h.push("</div>");
     h.push('<div class="detail-block">');
     h.push("<h4>贡献</h4>");
     h.push(
@@ -145,24 +137,96 @@
     h.push('<div class="detail-block">');
     h.push("<h4>完成情况</h4>");
     h.push(
-      '<div class="' +
-        completeClass +
-        '">' +
-        (completeEmpty ? "" : esc(completion)) +
-        "</div>"
+      '<div class="' + completeClass + '">' + (completeEmpty ? "" : esc(completion)) + "</div>"
     );
     h.push("</div>");
     h.push("</div>");
     h.push("</details>");
 
-    if (stripKnown) {
-      h.push('<div class="card-extra"><pre>' + esc(stripKnown) + "</pre></div>");
-    }
     h.push("</article>");
     return h.join("");
   }
 
-  /** 空格分词，全部子串都命中才算匹配（不区分大小写已在 haystack 侧） */
+  function renderTreeNodes(nodes, depth, pathStack) {
+    const stack = pathStack || [];
+    let html = "";
+    const arr = nodes || [];
+    for (let i = 0; i < arr.length; i++) {
+      const node = arr[i];
+      if (!node || typeof node !== "object") continue;
+      const kind = node.kind;
+      if (kind === "section") {
+        const t = String(node.title || "");
+        const nextStack = stack.concat(t);
+        html += '<section class="tb-group" data-depth="' + depth + '">';
+        html += '<h2 class="tb-section-title">' + esc(t) + "</h2>";
+        html += '<div class="tb-group-body">';
+        html += renderTreeNodes(node.children || [], depth + 1, nextStack);
+        html += "</div></section>";
+      } else if (kind === "task") {
+        const t = String(node.title || "");
+        const nextStack = stack.concat(t);
+        html += renderYamlTaskCard(node, depth, nextStack);
+        const kids = node.children;
+        if (kids && kids.length) {
+          html +=
+            '<div class="tb-nested">' +
+            renderTreeNodes(kids, depth + 1, nextStack) +
+            "</div>";
+        }
+      }
+    }
+    return html;
+  }
+
+  function buildTocFromNodes(nodes, pathStack) {
+    const stack = pathStack || [];
+    let html = '<ul class="toc-tree" role="list">';
+    const arr = nodes || [];
+    for (let i = 0; i < arr.length; i++) {
+      const node = arr[i];
+      if (!node || typeof node !== "object") continue;
+      if (node.kind === "section") {
+        const t = String(node.title || "");
+        const next = stack.concat(t);
+        const search = yamlSectionSearchStack(next);
+        html += '<li class="toc-section" data-search="' + escAttr(search) + '">';
+        html += '<span class="toc-section-label">' + esc(t) + "</span>";
+        html += buildTocFromNodes(node.children || [], next);
+        html += "</li>";
+      } else if (node.kind === "task") {
+        const t = String(node.title || "");
+        const next = stack.concat(t);
+        const sid = safeDomId(node.id);
+        const search = [
+          yamlSectionSearchStack(next),
+          node.completion,
+          node.description,
+          node.contributors,
+          node.paths,
+        ]
+          .filter(function (x) {
+            return x && String(x).trim();
+          })
+          .join("\n")
+          .toLowerCase();
+        const label = next.length > 1 ? next.slice(1).join(" / ") : t;
+        html += '<li class="toc-task" data-search="' + escAttr(search) + '">';
+        html +=
+          '<a href="#task-' +
+          sid +
+          '">' +
+          esc(label || t) +
+          "</a>";
+        const kids = node.children;
+        if (kids && kids.length) html += buildTocFromNodes(kids, next);
+        html += "</li>";
+      }
+    }
+    html += "</ul>";
+    return html;
+  }
+
   function matchesSearch(haystackLower, queryTrimmed) {
     if (!queryTrimmed) return true;
     const parts = queryTrimmed.toLowerCase().split(/\s+/).filter(Boolean);
@@ -172,6 +236,24 @@
     });
   }
 
+  function filterTocRecursive(ul, queryTrimmed) {
+    if (!ul) return false;
+    let anyVisible = false;
+    const lis = ul.querySelectorAll(":scope > li");
+    for (let i = 0; i < lis.length; i++) {
+      const li = lis[i];
+      const nested = li.querySelector(":scope > ul.toc-tree");
+      let childAny = false;
+      if (nested) childAny = filterTocRecursive(nested, queryTrimmed);
+      const hay = (li.getAttribute("data-search") || "").toLowerCase();
+      const selfOk = matchesSearch(hay, queryTrimmed);
+      const show = !queryTrimmed || selfOk || childAny;
+      li.classList.toggle("toc-hide", !show);
+      if (show) anyVisible = true;
+    }
+    return anyVisible;
+  }
+
   function applySearch(queryTrimmed) {
     const cards = app.querySelectorAll("article.card");
     cards.forEach(function (card) {
@@ -179,19 +261,13 @@
       const ok = matchesSearch(hay, queryTrimmed);
       card.classList.toggle("search-hide", !ok);
     });
+    const rootUl = tocEl.querySelector("ul.toc-tree");
+    filterTocRecursive(rootUl, queryTrimmed);
   }
 
-  function buildToc(items) {
-    let html =
-      '<div class="toc-title">目录</div><ul class="toc-list">';
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      const label = it.num + ". " + (it.title || "（无标题）");
-      html +=
-        '<li><a href="#task-' + it.num + '">' + esc(label) + "</a></li>";
-    }
-    html += "</ul>";
-    tocEl.innerHTML = html;
+  function buildTocYaml(doc) {
+    const inner = buildTocFromNodes(doc.tree || [], []);
+    tocEl.innerHTML = '<div class="toc-title">目录</div>' + inner;
   }
 
   function bindToolbar() {
@@ -220,23 +296,13 @@
     });
   }
 
-  function setToolbarVisible(show) {
-    toolbar.classList.toggle("is-hidden", !show);
-    toolbar.setAttribute("aria-hidden", show ? "false" : "true");
+  function setSidebarVisible(show) {
+    sidebar.classList.toggle("is-hidden", !show);
+    sidebar.setAttribute("aria-hidden", show ? "false" : "true");
     if (!show) {
       searchEl.value = "";
       tocEl.innerHTML = "";
     }
-  }
-
-  function attachSearchIndex(items) {
-    const cards = app.querySelectorAll("article.card");
-    items.forEach(function (it, i) {
-      const el = cards[i];
-      if (el) {
-        el.dataset.search = itemSearchText(it);
-      }
-    });
   }
 
   async function load() {
@@ -244,7 +310,7 @@
       return;
     }
     notice.style.display = "none";
-    setToolbarVisible(false);
+    setSidebarVisible(false);
     app.innerHTML = '<p class="notice">加载中…</p>';
     let res;
     try {
@@ -267,31 +333,32 @@
       (data.source === "gist" ? "Gist（实时）" : "本地缓存") +
       (data.gist_url ? " · " + data.gist_url : "");
 
-    const md = data.markdown || "";
-    const parsed = parseTaskbookMarkdown(md);
-    let html = "";
-    if (parsed.items.length) {
-      if (parsed.preamble) {
-        html += '<div class="preamble">' + esc(parsed.preamble) + "</div>";
-      }
-      html += '<div class="items">';
-      for (let j = 0; j < parsed.items.length; j++) {
-        html += renderItem(parsed.items[j]);
-      }
-      html += "</div>";
-    } else {
-      html += '<div class="preamble raw">' + esc(md || "（空任务书）") + "</div>";
-    }
-    app.innerHTML = html;
+    const raw = data.taskbook || data.markdown || "";
+    const yamlDoc = tryParseYamlTaskbook(raw);
 
-    if (parsed.items.length) {
-      attachSearchIndex(parsed.items);
-      buildToc(parsed.items);
-      setToolbarVisible(true);
+    if (yamlDoc) {
+      let html = '<div class="items yaml-items">';
+      html += renderTreeNodes(yamlDoc.tree || [], 0, []);
+      html += "</div>";
+      app.innerHTML = html;
+      buildTocYaml(yamlDoc);
+      setSidebarVisible(true);
       bindToolbar();
-    } else {
-      setToolbarVisible(false);
+      applySearch("");
+      return;
     }
+
+    let errHtml =
+      '<div class="preamble raw">' + esc(raw || "（空）") + "</div>";
+    if (typeof jsyaml === "undefined") {
+      errHtml +=
+        '<p class="notice err yaml-miss">未加载 js-yaml（CDN），无法解析任务书。请检查网络后刷新。</p>';
+    } else {
+      errHtml +=
+        '<p class="notice err">任务书必须是有效的 YAML v1（含 <code>version: 1</code> 与 <code>tree:</code>）。请在机器人侧执行 <code>/watcher organize</code> 或重新 <code>/watcher set_gist</code>。</p>';
+    }
+    app.innerHTML = errHtml;
+    setSidebarVisible(false);
   }
 
   load();

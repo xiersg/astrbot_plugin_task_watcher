@@ -59,27 +59,48 @@ body {
 .shell {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  max-width: 44rem;
+  flex-direction: row;
+  align-items: stretch;
+  max-width: 960px;
   margin: 0 auto;
   width: 100%;
+  min-height: 0;
 }
 
-.toolbar {
-  padding: 0.75rem 1.25rem 0;
-  flex-shrink: 0;
+.sidebar {
+  flex: 0 0 240px;
+  width: 240px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.toolbar.is-hidden {
+.sidebar.is-hidden {
   display: none;
 }
 
-.toolbar-row {
-  margin-bottom: 0.65rem;
+.sidebar-inner {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: 100vh;
+  overflow-y: auto;
+  width: 100%;
+  padding: 0.75rem 0.85rem 1.25rem;
+}
+
+.main-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .search-input {
   width: 100%;
+  margin-bottom: 0.65rem;
   padding: 0.55rem 0.75rem 0.55rem 2rem;
   font-size: 0.9rem;
   border: 1px solid var(--border-strong);
@@ -105,7 +126,7 @@ body {
 
 .toc {
   margin: 0;
-  padding: 0 0 0.5rem;
+  padding: 0;
 }
 
 .toc-title {
@@ -117,34 +138,46 @@ body {
   margin-bottom: 0.45rem;
 }
 
-.toc-list {
+.toc-tree {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 0.5rem;
 }
 
-.toc-list a {
-  display: inline-block;
-  padding: 0.28rem 0.55rem;
-  font-size: 0.8rem;
+.toc-tree .toc-tree {
+  margin: 0.2rem 0 0.35rem;
+  padding-left: 0.55rem;
+  border-left: 2px solid var(--border);
+}
+
+.toc-section-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
   color: var(--accent);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  text-decoration: none;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  margin: 0.4rem 0 0.15rem;
 }
 
-.toc-list a:hover {
+.toc-task a {
+  display: block;
+  padding: 0.22rem 0.35rem;
+  margin: 0.05rem 0;
+  font-size: 0.8rem;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  line-height: 1.35;
+  word-break: break-word;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.toc-task a:hover {
   background: var(--accent-soft);
-  border-color: var(--accent);
+  color: var(--accent);
+}
+
+li.toc-hide {
+  display: none !important;
 }
 
 .sr-only {
@@ -163,6 +196,7 @@ body {
   flex: 1;
   padding: 0.5rem 1.25rem 2.5rem;
   width: 100%;
+  max-width: 44rem;
 }
 
 article.card.search-hide {
@@ -370,4 +404,75 @@ article.card.search-hide {
 
 .err {
   color: #dc2626;
+}
+
+.yaml-miss {
+  margin-top: 0.75rem;
+}
+
+.tb-group {
+  margin-bottom: 1.1rem;
+}
+
+.tb-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.tb-group-body {
+  padding-left: 0.55rem;
+  margin-left: 0.1rem;
+  border-left: 2px solid var(--border);
+}
+
+.tb-nested {
+  margin-top: 0.75rem;
+  padding-left: 0.55rem;
+  border-left: 1px dashed var(--border-strong);
+}
+
+.card .task-id {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+}
+
+.card .task-id code {
+  font-size: 0.75rem;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  padding: 0.12em 0.4em;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.card .field.crumb {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .shell {
+    flex-direction: column;
+    max-width: 100%;
+  }
+
+  .sidebar {
+    flex: none;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-inner {
+    position: relative;
+    max-height: 42vh;
+  }
+
+  #app {
+    max-width: 100%;
+  }
 }

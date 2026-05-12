@@ -88,17 +88,17 @@ class TaskWatcherWebServer:
             )
         gist_id = cfg.get("gist_id")
         gh_token = cfg.get("token")
-        markdown = ""
+        taskbook = ""
         source = "local"
         try:
             if gist_id and gh_token:
                 mgr = GistManager(gh_token)
                 fetched = await mgr.get_gist_content(gist_id)
                 if fetched is not None:
-                    markdown = strip_fenced_markdown(fetched)
+                    taskbook = strip_fenced_markdown(fetched)
                     source = "gist"
-            if not markdown:
-                markdown = strip_fenced_markdown(
+            if not taskbook:
+                taskbook = strip_fenced_markdown(
                     str(cfg.get("taskbook_content") or "")
                 )
                 source = "local"
@@ -112,7 +112,7 @@ class TaskWatcherWebServer:
         return web.json_response(
             {
                 "ok": True,
-                "markdown": markdown,
+                "taskbook": taskbook,
                 "source": source,
                 "gist_url": cfg.get("gist_url"),
             },

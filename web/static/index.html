@@ -12,28 +12,31 @@
     <p class="meta" id="meta"></p>
   </header>
   <div class="shell">
-    <div id="toolbar" class="toolbar is-hidden" aria-hidden="true">
-      <div class="toolbar-row">
-        <label class="sr-only" for="search">搜索任务书</label>
+    <aside id="sidebar" class="sidebar is-hidden" aria-hidden="true">
+      <div class="sidebar-inner">
+        <label class="sr-only" for="search">搜索任务书与目录</label>
         <input
           type="search"
           id="search"
           class="search-input"
-          placeholder="搜索标题、条目、路径、贡献、完成情况…"
+          placeholder="筛选目录与卡片…"
           autocomplete="off"
           spellcheck="false"
         />
+        <nav class="toc" id="toc" aria-label="目录"></nav>
       </div>
-      <nav class="toc" id="toc" aria-label="目录"></nav>
+    </aside>
+    <div class="main-column">
+      <main id="app">
+        <section class="notice" id="notice">
+          请在地址栏带上只读令牌，例如：<code>http://127.0.0.1:端口/?token=你的令牌</code><br />
+          在 AstrBot 中对机器人发送 <code>/watcher web</code> 可得到带令牌的完整链接。
+        </section>
+      </main>
     </div>
-  <main id="app">
-    <section class="notice" id="notice">
-      请在地址栏带上只读令牌，例如：<code>http://127.0.0.1:端口/?token=你的令牌</code><br />
-      在 AstrBot 中对机器人发送 <code>/watcher web</code> 可得到带令牌的完整链接。
-    </section>
-  </main>
   </div>
   <footer class="foot">TaskWatcher · 数据由机器人后端从 Gist 拉取</footer>
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -366,6 +366,31 @@ article.card.search-hide {
   padding: 0;
 }
 
+.contrib-avatars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-bottom: 0.45rem;
+}
+
+.contrib-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.contrib-text {
+  font-size: 0.9rem;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .preamble {
   margin-bottom: 1.25rem;
   padding: 1rem 1.1rem;

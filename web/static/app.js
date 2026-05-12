@@ -124,6 +124,23 @@
     return stack.filter(Boolean).join(" ").toLowerCase();
   }
 
+  /** 从 contributors 文本中解析 @login，顺序去重，用于 GitHub 头像 */
+  function parseGitHubLoginsFromContributors(text) {
+    const re = /@([a-zA-Z0-9](?:-?[a-zA-Z0-9]){0,38})/g;
+    const seen = {};
+    const out = [];
+    let m;
+    const s = String(text || "");
+    while ((m = re.exec(s)) !== null) {
+      const login = m[1];
+      if (!seen[login]) {
+        seen[login] = true;
+        out.push(login);
+      }
+    }
+    return out;
+  }
+
   function renderYamlTaskCard(node, depth, pathStack) {
     const title = String(node.title || "（无标题）");
     const sid = safeDomId(node.id);
@@ -180,9 +197,35 @@
     h.push("</div>");
     h.push('<div class="detail-block">');
     h.push("<h4>贡献</h4>");
-    h.push(
-      '<div class="' + contribClass + '">' + (contribEmpty ? "" : esc(contribution)) + "</div>"
-    );
+    let contribInner = "";
+    if (!contribEmpty) {
+      const logins = parseGitHubLoginsFromContributors(contribution);
+      const avatarParts = [];
+      if (logins.length) {
+        avatarParts.push('<div class="contrib-avatars">');
+        for (let j = 0; j < logins.length; j++) {
+          const login = logins[j];
+          const src =
+            "https://github.com/" + encodeURIComponent(login) + ".png?size=96";
+          avatarParts.push(
+            '<img class="contrib-avatar" src="' +
+              escAttr(src) +
+              '" alt="@' +
+              escAttr(login) +
+              '" title="@' +
+              escAttr(login) +
+              '" width="40" height="40" loading="lazy" referrerpolicy="no-referrer" />'
+          );
+        }
+        avatarParts.push("</div>");
+      }
+      contribInner =
+        avatarParts.join("") +
+        '<div class="contrib-text">' +
+        esc(contribution) +
+        "</div>";
+    }
+    h.push('<div class="' + contribClass + '">' + contribInner + "</div>");
     h.push("</div>");
     h.push('<div class="detail-block">');
     h.push("<h4>完成情况</h4>");

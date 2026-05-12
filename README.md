@@ -21,7 +21,8 @@
 | `/watcher watch` | 仅预览增量 diff（不写任务书） |
 | `/watcher status` | 任务书统计（YAML task 数） |
 | `/watcher config` | 当前配置摘要 |
-| `/watcher web` | 本机只读面板链接（需插件配置 `web_server_port`） |
+| `/watcher web` | 本机只读面板（需配置 `web_server_port`）；**同一用户复用固定 token**，链接不变便于收藏 |
+| `/watcher web_new` | **轮换**只读 token 并返回新链接（旧链接失效） |
 
 ## 配置步骤
 

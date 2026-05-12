@@ -61,9 +61,26 @@ TASKBOOK_YAML_SCHEMA_DOC = """
 """
 
 
+def is_taskbook_yaml_v1_document(doc: Any) -> bool:
+    """是否为可识别的任务书根文档（version 视为 1 即可，兼容 YAML 将 1 解析为字符串等）。"""
+    if not isinstance(doc, dict) or not isinstance(doc.get("tree"), list):
+        return False
+    v = doc.get("version")
+    if isinstance(v, bool):
+        return False
+    if isinstance(v, int):
+        return v == 1
+    if isinstance(v, float):
+        return v == 1.0
+    try:
+        return int(float(str(v).strip())) == 1
+    except (TypeError, ValueError):
+        return False
+
+
 def count_tasks_in_tree(doc: Any) -> int:
     """统计 kind==task 的节点数量（含任意深度嵌套）。"""
-    if not isinstance(doc, dict) or doc.get("version") != 1:
+    if not is_taskbook_yaml_v1_document(doc):
         return 0
 
     def walk(nodes: List[Any]) -> int:
@@ -71,7 +88,8 @@ def count_tasks_in_tree(doc: Any) -> int:
         for node in nodes or []:
             if not isinstance(node, dict):
                 continue
-            if node.get("kind") == "task":
+            k = str(node.get("kind") or "").strip().lower()
+            if k == "task":
                 n += 1
             n += walk(node.get("children") or [])
         return n

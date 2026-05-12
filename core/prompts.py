@@ -11,6 +11,7 @@ Prompt 模板模块
    task.id）、完成度、以及是否要把一行进展追加进 YAML 的 completion（completion_log_line）。
 3. TASKBOOK_UPDATE：把上一步 JSON 合并进完整 YAML（按 task_id 定位节点，改 completion / contributors），
    不再让模型自由发挥成 Markdown。paths 用于把文件变更和任务节点对齐；contributors 对应 YAML 字段。
+4. TASKBOOK_TASKS_EDIT（/watcher tasks_edit）：按用户自然语言增删任务点，输出完整新 YAML。
 """
 
 from .taskbook_schema import TASKBOOK_YAML_SCHEMA_DOC
@@ -157,5 +158,30 @@ TASKBOOK_UPDATE_PROMPT = (
 ## 输出要求
 
 **只返回更新后的完整 YAML 正文**（第一行 `version: 1`），不要 Markdown 代码围栏，不要任何说明文字。
+"""
+)
+
+
+TASKBOOK_TASKS_EDIT_PROMPT = (
+    """你是任务书维护助手，仅根据「编辑说明」修改 YAML 任务书（version: 1）。
+
+## 当前任务书（YAML）
+{current_content}
+
+## 用户编辑说明（用自然语言描述：要新增/删除哪些任务点、挂到哪个分组下、id/title/paths 等）
+{instruction}
+
+## 必须遵守
+1. 输出 **完整** YAML 正文（第一行 `version: 1`，随后 `tree:`），不要用 Markdown 代码围栏，不要附加说明。
+2. **仅**按说明增删或调整 `kind: task` 与必要的 `kind: section` 结构；不要无故清空与说明无关节点的 `completion` / `description`。
+3. 所有 `task`/`section` 的 `id` 全文唯一；新建 `task` 时 `completion`/`description`/`contributors`/`paths` 若无信息用 `""`；无子节点时 `children: []`。
+4. 删除任务时移除该 `task` 节点整棵（含其 `children`）。
+5. 不要添加未约定的顶层键。
+
+"""
+    + TASKBOOK_YAML_SCHEMA_DOC
+    + """
+
+请直接输出修改后的 YAML。
 """
 )

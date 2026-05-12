@@ -11,8 +11,11 @@ GitHub API 客户端模块
 - 策略模式：不同的 API 调用策略
 """
 
+import re
 import aiohttp
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
+
 from astrbot.api import logger
 
 
@@ -49,8 +52,6 @@ class GitHubAPIClient:
         """
         获取仓库提交记录。sha 为分支名或提交 SHA，省略则使用 GitHub 默认分支。
         """
-        from urllib.parse import quote
-
         url = f"{self.base_url}/repos/{owner}/{repo}/commits?per_page={limit}"
         if sha:
             url += "&sha=" + quote(sha, safe="")
@@ -64,6 +65,266 @@ class GitHubAPIClient:
                 else:
                     error_text = await response.text()
                     raise Exception(f"GitHub API 错误 {response.status}: {error_text}")
+
+    @staticmethod
+    def _parse_link_next(link_header: Optional[str]) -> Optional[str]:
+        if not link_header:
+            return None
+        for segment in link_header.split(","):
+            if 'rel="next"' not in segment and "rel='next'" not in segment:
+                continue
+            m = re.search(r"<([^>]+)>", segment.strip())
+            if m:
+                return m.group(1)
+        return None
+
+    async def fetch_commits_since(
+        self,
+        owner: str,
+        repo: str,
+        since_iso: str,
+        *,
+        max_pages: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        列出 since_iso（含时区，建议 Z）之后的提交，分页直至无 next 或达到 max_pages。
+        每项: sha, date, login, message, html_url
+        """
+        path = f"{self.base_url}/repos/{quote(owner, safe='')}/{quote(repo, safe='')}/commits"
+        url = f"{path}?since={quote(since_iso, safe='')}&per_page=100"
+        out: List[Dict[str, Any]] = []
+        page = 0
+        async with aiohttp.ClientSession() as session:
+            while url and page < max_pages:
+                page += 1
+                async with session.get(url, headers=self._get_headers()) as resp:
+                    if resp.status != 200:
+                        err = await resp.text()
+                        raise Exception(f"GitHub API 错误 {resp.status}: {err[:800]}")
+                    batch = await resp.json()
+                    if not isinstance(batch, list):
+                        break
+                    for c in batch:
+                        if not isinstance(c, dict):
+                            continue
+                        commit = c.get("commit") or {}
+                        auth = commit.get("author") or {}
+                        cm = commit.get("committer") or {}
+                        date = auth.get("date") or cm.get("date") or ""
+                        msg = (commit.get("message") or "").split("\n", 1)[0].strip()
+                        gh_author = c.get("author") or {}
+                        login = (
+                            gh_author.get("login")
+                            if isinstance(gh_author, dict) and gh_author.get("login")
+                            else None
+                        )
+                        if not login and isinstance(auth, dict):
+                            login = (auth.get("name") or "").strip() or None
+                        out.append(
+                            {
+                                "sha": str(c.get("sha") or "")[:40],
+                                "date": date,
+                                "login": login or "（无 GitHub 登录名）",
+                                "message": msg[:200],
+                                "html_url": str(c.get("html_url") or ""),
+                            }
+                        )
+                    url = self._parse_link_next(resp.headers.get("Link"))
+        return out
+
+    async def fetch_commits_between(
+        self,
+        owner: str,
+        repo: str,
+        since_iso: str,
+        until_iso: str,
+        *,
+        max_pages: int = 35,
+    ) -> List[Dict[str, Any]]:
+        """
+        在 [since_iso, until_iso) 时间窗口内列提交（GitHub since/until 语义）。
+        每项同 fetch_commits_since。
+        """
+        path = f"{self.base_url}/repos/{quote(owner, safe='')}/{quote(repo, safe='')}/commits"
+        url = (
+            f"{path}?since={quote(since_iso, safe='')}&until={quote(until_iso, safe='')}"
+            f"&per_page=100"
+        )
+        out: List[Dict[str, Any]] = []
+        page = 0
+        async with aiohttp.ClientSession() as session:
+            while url and page < max_pages:
+                page += 1
+                async with session.get(url, headers=self._get_headers()) as resp:
+                    if resp.status != 200:
+                        err = await resp.text()
+                        raise Exception(f"GitHub API 错误 {resp.status}: {err[:800]}")
+                    batch = await resp.json()
+                    if not isinstance(batch, list):
+                        break
+                    for c in batch:
+                        if not isinstance(c, dict):
+                            continue
+                        commit = c.get("commit") or {}
+                        auth = commit.get("author") or {}
+                        cm = commit.get("committer") or {}
+                        date = auth.get("date") or cm.get("date") or ""
+                        msg = (commit.get("message") or "").split("\n", 1)[0].strip()
+                        gh_author = c.get("author") or {}
+                        login = (
+                            gh_author.get("login")
+                            if isinstance(gh_author, dict) and gh_author.get("login")
+                            else None
+                        )
+                        if not login and isinstance(auth, dict):
+                            login = (auth.get("name") or "").strip() or None
+                        out.append(
+                            {
+                                "sha": str(c.get("sha") or "")[:40],
+                                "date": date,
+                                "login": login or "（无 GitHub 登录名）",
+                                "message": msg[:200],
+                                "html_url": str(c.get("html_url") or ""),
+                            }
+                        )
+                    url = self._parse_link_next(resp.headers.get("Link"))
+        return out
+
+    async def fetch_merged_pulls_search(
+        self,
+        owner: str,
+        repo: str,
+        merged_since_day: str,
+        *,
+        max_results: int = 1000,
+    ) -> Tuple[List[Dict[str, Any]], bool]:
+        """
+        使用 search API 拉取 merged_since_day（YYYY-MM-DD）起合并的 PR。
+        每项: number, title, login, merged_day, html_url
+        返回 (列表, 是否因 GitHub search 1000 条上限而截断)。
+        """
+        q = f"repo:{owner}/{repo} is:pr is:merged merged:>={merged_since_day}"
+        collected: List[Dict[str, Any]] = []
+        per_page = 100
+        max_page = max(1, (max_results + per_page - 1) // per_page)
+        total_count = 0
+        async with aiohttp.ClientSession() as session:
+            for page in range(1, max_page + 1):
+                url = (
+                    f"{self.base_url}/search/issues?q={quote(q, safe='')}"
+                    f"&per_page={per_page}&page={page}"
+                )
+                headers = dict(self._get_headers())
+                headers["Accept"] = "application/vnd.github+json"
+                async with session.get(url, headers=headers) as resp:
+                    if resp.status != 200:
+                        err = await resp.text()
+                        raise Exception(f"GitHub Search API 错误 {resp.status}: {err[:800]}")
+                    data = await resp.json()
+                if page == 1:
+                    total_count = int(data.get("total_count") or 0)
+                items = data.get("items") or []
+                if not isinstance(items, list) or not items:
+                    break
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    if "pull_request" not in it:
+                        continue
+                    closed = it.get("closed_at") or ""
+                    user = it.get("user") or {}
+                    login = user.get("login") if isinstance(user, dict) else None
+                    collected.append(
+                        {
+                            "number": it.get("number"),
+                            "title": str(it.get("title") or "")[:240],
+                            "login": login or "（无 GitHub 登录名）",
+                            "merged_day": (
+                                closed[:10]
+                                if isinstance(closed, str) and len(closed) >= 10
+                                else ""
+                            ),
+                            "html_url": str(it.get("html_url") or ""),
+                        }
+                    )
+                    if len(collected) >= max_results:
+                        truncated = total_count > len(collected)
+                        return collected[:max_results], truncated
+                if len(items) < per_page:
+                    break
+                if page * per_page >= total_count:
+                    break
+        truncated = total_count > len(collected)
+        return collected, truncated
+
+    async def fetch_merged_pulls_search_range(
+        self,
+        owner: str,
+        repo: str,
+        merged_start_day: str,
+        merged_end_day: str,
+        *,
+        max_results: int = 500,
+    ) -> Tuple[List[Dict[str, Any]], bool]:
+        """
+        已合并 PR，merged 日期在 [merged_start_day, merged_end_day]（闭区间，YYYY-MM-DD）。
+        """
+        q = (
+            f"repo:{owner}/{repo} is:pr is:merged "
+            f"merged:{merged_start_day}..{merged_end_day}"
+        )
+        collected: List[Dict[str, Any]] = []
+        per_page = 100
+        max_page = max(1, (max_results + per_page - 1) // per_page)
+        total_count = 0
+        async with aiohttp.ClientSession() as session:
+            for page in range(1, max_page + 1):
+                url = (
+                    f"{self.base_url}/search/issues?q={quote(q, safe='')}"
+                    f"&per_page={per_page}&page={page}"
+                )
+                headers = dict(self._get_headers())
+                headers["Accept"] = "application/vnd.github+json"
+                async with session.get(url, headers=headers) as resp:
+                    if resp.status != 200:
+                        err = await resp.text()
+                        raise Exception(f"GitHub Search API 错误 {resp.status}: {err[:800]}")
+                    data = await resp.json()
+                if page == 1:
+                    total_count = int(data.get("total_count") or 0)
+                items = data.get("items") or []
+                if not isinstance(items, list) or not items:
+                    break
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    if "pull_request" not in it:
+                        continue
+                    closed = it.get("closed_at") or ""
+                    user = it.get("user") or {}
+                    login = user.get("login") if isinstance(user, dict) else None
+                    collected.append(
+                        {
+                            "number": it.get("number"),
+                            "title": str(it.get("title") or "")[:240],
+                            "login": login or "（无 GitHub 登录名）",
+                            "merged_day": (
+                                closed[:10]
+                                if isinstance(closed, str) and len(closed) >= 10
+                                else ""
+                            ),
+                            "html_url": str(it.get("html_url") or ""),
+                        }
+                    )
+                    if len(collected) >= max_results:
+                        truncated = total_count > len(collected)
+                        return collected[:max_results], truncated
+                if len(items) < per_page:
+                    break
+                if page * per_page >= total_count:
+                    break
+        truncated = total_count > len(collected)
+        return collected, truncated
 
     async def get_commit_detail(self, owner: str, repo: str, sha: str) -> Dict:
         """

@@ -55,6 +55,19 @@ def _taskbook_task_count(taskbook: str) -> int:
     return max(1, min(30, n or 1))
 
 
+def _instruction_after_tasks_edit_command(event: AstrMessageEvent) -> str:
+    """从整条消息中取出 tasks_edit 子命令后的说明文字（支持空格与多行）。"""
+    s = (getattr(event, "message_str", None) or "").strip()
+    if not s:
+        return ""
+    lower = s.lower()
+    for marker in ("tasks_edit", "任务书编辑", "编辑任务"):
+        i = lower.find(marker.lower())
+        if i >= 0:
+            return s[i + len(marker) :].strip()
+    return ""
+
+
 @register("astrbot_plugin_task_watcher", "xiersg", "检测Git仓库变化，分析任务完成情况", "1.0.0")
 class TaskWatcherPlugin(Star):
     """任务监听插件"""
@@ -146,6 +159,7 @@ class TaskWatcherPlugin(Star):
 
 【任务管理】
 • /watcher organize - AI 将任务书重新编排为 YAML 嵌套结构
+• /watcher tasks_edit <说明> - AI 按自然语言 **增删/调整任务点**（写回 Gist；说明写在子命令后）
 • /watcher check    - 有新提交时：AI 根据 diff/PR 输出 JSON，再合并进 **YAML 任务书** 并同步 Gist
 
 【监视】
@@ -505,6 +519,71 @@ Gist: {cfg.get("gist_url")}"""
         yield event.plain_result(
             f"http://{host}:{port}/?token={token}\n（已轮换 token，旧书签失效）"
         )
+
+    @watcher_group.command("tasks_edit", alias={"任务书编辑", "编辑任务"})
+    async def cmd_tasks_edit(self, event: AstrMessageEvent):
+        """AI 按自然语言增删 YAML 任务点并写回 Gist"""
+        event.stop_event()
+        user_id = self._get_user_id(event)
+        if not user_id:
+            yield event.plain_result("无法获取用户ID")
+            return
+        cfg = self.user_configs.get(user_id)
+        if not cfg:
+            yield event.plain_result(
+                "请先配置:\n1. /watcher set_token <token>\n2. /watcher set_gist <url>"
+            )
+            return
+        if not cfg.get("gist_id"):
+            yield event.plain_result("❌ 请先设置 Gist: /watcher set_gist <url>")
+            return
+
+        instruction = _instruction_after_tasks_edit_command(event)
+        if not instruction:
+            yield event.plain_result(
+                "请在子命令后写明要如何改任务书，例如：\n"
+                "/watcher tasks_edit 删除 id 为 task_old 的任务；在「后台」分组下新增标题为「限流」的任务，id 用 task_rl，paths 填 src/limit.py\n"
+                "（也支持别名：/任务书编辑 …、/编辑任务 …）"
+            )
+            return
+
+        if _parse_taskbook_yaml_v1(cfg.get("taskbook_content") or "") is None:
+            yield event.plain_result(
+                "❌ 当前任务书不是有效 YAML v1。请先 /watcher organize 或 /watcher set_gist。"
+            )
+            return
+
+        yield event.plain_result("🤖 正在按说明编辑任务书（AI）…")
+
+        try:
+            raw_out = strip_fenced_markdown(
+                await self._call_ai(
+                    prompts.TASKBOOK_TASKS_EDIT_PROMPT.format(
+                        current_content=cfg.get("taskbook_content") or "",
+                        instruction=instruction,
+                    )
+                )
+            )
+            try:
+                doc = yaml.safe_load(raw_out)
+            except Exception as e:
+                yield event.plain_result(f"❌ AI 输出不是合法 YAML：{e}")
+                return
+            if not is_taskbook_yaml_v1_document(doc):
+                yield event.plain_result(
+                    "❌ AI 输出不符合任务书 v1（version + tree）。未写入 Gist，请重试或改写说明。"
+                )
+                return
+
+            gist_mgr = GistManager(cfg["token"])
+            await gist_mgr.update_taskbook(cfg["gist_id"], raw_out)
+            cfg["taskbook_content"] = raw_out
+            cfg["tasks_edited_at"] = datetime.now().isoformat()
+            self._save_configs()
+            n = count_tasks_in_tree(doc)
+            yield event.plain_result(f"✅ 已更新任务书并同步 Gist（当前共 {n} 个 task 节点）")
+        except Exception as e:
+            yield event.plain_result(f"❌ 编辑失败: {e}")
 
     # ============ 辅助方法 ============
 

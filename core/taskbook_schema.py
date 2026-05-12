@@ -26,7 +26,7 @@ TASKBOOK_YAML_SCHEMA_DOC = """
             title: "任务点1"
             completion: "完成情况以及尚未完成的部分"
             description: "描述"
-            contributors: "贡献（姓名或 @login）"
+            contributors: "贡献（姓名或 @GitHubLogin，@ 登录名可在网页显示头像）"
             paths: "可选，关联仓库路径，逗号分隔，如 src/a.py,src/b/"
             children: []
       - kind: section
@@ -53,7 +53,7 @@ TASKBOOK_YAML_SCHEMA_DOC = """
 1. version 必须为整数 1。
 2. tree 为数组；元素 kind 只能是 section 或 task。
 3. section 表示非任务分组，字段：id, title, children（数组，可空）。
-4. task 字段：id, title, completion, description, contributors（无内容用空字符串 ""）, paths（可选，关联路径字符串）, children（嵌套子任务，可空数组）。
+4. task 字段：id, title, completion, description, contributors（无内容用空字符串 ""；GitHub 用户建议写 **@login**，网页贡献区可显示头像）, paths（可选，关联路径字符串）, children（嵌套子任务，可空数组）。
 5. 所有 id 全文件唯一，仅使用字母、数字、下划线、连字符。
 6. 不要添加未约定的顶层键。
 

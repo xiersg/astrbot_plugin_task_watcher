@@ -6,7 +6,7 @@
 
 - 对比 GitHub 提交（compare）并生成截断 diff 供 AI 分析
 - **YAML v1 嵌套任务书**（`section` 分组 + `task` 可嵌套，`completion` / `contributors` / `paths` 等）
-- 任务书存 **Gist**；本机可开 **只读 Web 面板** 浏览
+- 任务书存 **Gist**；本机可开 **只读 Web 面板** 浏览；在已配置 `set_repo` 与 GitHub Token 时，面板顶部展示 **仓库贡献热力图**（UTC 按日聚合提交与已合并 PR；悬停看贡献者，点击查看排行榜与链接）
 
 ## 指令
 

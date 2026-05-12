@@ -13,6 +13,8 @@ from aiohttp import web
 from astrbot.api import logger
 
 from .gist_manager import GistManager
+from .github_client import GitHubAPIClient
+from .contributions_agg import build_contributions_calendar, parse_repo_slug
 
 
 def read_web_listen_config(config_obj: Any) -> tuple[str, int]:
@@ -129,6 +131,58 @@ class TaskWatcherWebServer:
             headers=_no_store_headers(),
         )
 
+    async def _handle_api_contributions(self, request: web.Request) -> web.Response:
+        token = request.query.get("token") or ""
+        cfg = self._find_session(token)
+        if not cfg:
+            return web.json_response(
+                {"ok": False, "error": "invalid_token"},
+                status=401,
+                headers=_no_store_headers(),
+            )
+        gh_token = str(cfg.get("token") or "").strip()
+        if not gh_token:
+            return web.json_response(
+                {"ok": False, "error": "no_github_token", "message": "未配置 GitHub Token"},
+                status=401,
+                headers=_no_store_headers(),
+            )
+        repo_s = str(cfg.get("repo") or "").strip()
+        if not repo_s:
+            return web.json_response(
+                {
+                    "ok": True,
+                    "enabled": False,
+                    "reason": "no_repo",
+                    "message": "未设置监视仓库，无法拉取贡献数据（/watcher set_repo）",
+                },
+                headers=_no_store_headers(),
+            )
+        raw_days = request.query.get("days") or "371"
+        try:
+            days = int(raw_days)
+        except (TypeError, ValueError):
+            days = 371
+        try:
+            owner, name = parse_repo_slug(repo_s)
+        except ValueError as e:
+            return web.json_response(
+                {"ok": False, "error": str(e)},
+                status=400,
+                headers=_no_store_headers(),
+            )
+        try:
+            client = GitHubAPIClient(gh_token)
+            payload = await build_contributions_calendar(client, owner, name, days)
+            return web.json_response(payload, headers=_no_store_headers())
+        except Exception as e:
+            logger.exception("web /api/contributions: %s", e)
+            return web.json_response(
+                {"ok": False, "error": str(e)},
+                status=502,
+                headers=_no_store_headers(),
+            )
+
     async def _handle_static(self, request: web.Request) -> web.StreamResponse:
         rel = request.match_info.get("path", "index.html")
         if ".." in rel or rel.startswith("/"):
@@ -152,6 +206,8 @@ class TaskWatcherWebServer:
         app = web.Application()
         app.router.add_get("/api/taskbook", self._handle_api_taskbook)
         app.router.add_options("/api/taskbook", self._handle_options)
+        app.router.add_get("/api/contributions", self._handle_api_contributions)
+        app.router.add_options("/api/contributions", self._handle_options)
         app.router.add_get("/", self._handle_index)
         app.router.add_get("/static/{path:.*}", self._handle_static)
         return app

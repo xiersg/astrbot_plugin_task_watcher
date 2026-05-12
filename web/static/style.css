@@ -486,6 +486,250 @@ article.card.search-hide {
   color: var(--muted);
 }
 
+/* —— 贡献热力图 —— */
+.contrib-heatmap-section {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+.contrib-heatmap-section .hm-inner {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.hm-head .hm-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.hm-meta {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.hm-note,
+.hm-warn {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.hm-warn {
+  color: #b45309;
+}
+
+.hm-grid-wrap {
+  margin-top: 0.75rem;
+  padding: 0.35rem 0;
+}
+
+.hm-grid {
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+  align-items: stretch;
+}
+
+.hm-week {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.hm-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  box-sizing: border-box;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  flex-shrink: 0;
+}
+
+.hm-cell:not(.hm-out) {
+  cursor: pointer;
+}
+
+.hm-cell.hm-out {
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.hm-cell:not(.hm-out):focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hm-cell.hm-l0 {
+  background: #e2e8f0;
+}
+
+.hm-cell.hm-l1 {
+  background: #bfdbfe;
+}
+
+.hm-cell.hm-l2 {
+  background: #93c5fd;
+}
+
+.hm-cell.hm-l3 {
+  background: #3b82f6;
+}
+
+.hm-cell.hm-l4 {
+  background: #1d4ed8;
+}
+
+.hm-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.hm-leg {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.hm-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.hm-msg {
+  margin: 0;
+}
+
+.hm-tooltip {
+  position: fixed;
+  z-index: 10050;
+  max-width: 280px;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: pre-line;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.08s ease;
+}
+
+.hm-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+}
+
+.hm-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.hm-modal-panel {
+  position: relative;
+  max-width: min(560px, calc(100vw - 2rem));
+  max-height: min(80vh, 640px);
+  margin: 6vh auto 0;
+  padding: 1rem 1.15rem 1.1rem;
+  overflow: auto;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-card);
+}
+
+.hm-modal-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hm-modal-close:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.hm-modal-panel h3 {
+  margin: 0 2rem 0.5rem 0;
+  font-size: 1rem;
+}
+
+.hm-modal-panel h4 {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hm-modal-empty {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
+
+.hm-rank-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.hm-rank-table th,
+.hm-rank-table td {
+  padding: 0.35rem 0.45rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.hm-rank-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+
+.hm-link-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.hm-link-list li {
+  margin: 0.25rem 0;
+}
+
+.hm-link-list a {
+  color: var(--accent);
+}
+
 @media (max-width: 720px) {
   .shell {
     flex-direction: column;

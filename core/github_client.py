@@ -12,7 +12,7 @@ GitHub API 客户端模块
 """
 
 import aiohttp
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 from astrbot.api import logger
 
 
@@ -39,22 +39,21 @@ class GitHubAPIClient:
             headers["Authorization"] = f"token {self.token}"
         return headers
 
-    async def get_commits(self, owner: str, repo: str, limit: int = 100) -> List[Dict]:
+    async def get_commits(
+        self,
+        owner: str,
+        repo: str,
+        limit: int = 100,
+        sha: Optional[str] = None,
+    ) -> List[Dict]:
         """
-        获取仓库的提交记录
-
-        Args:
-            owner: 仓库所有者
-            repo: 仓库名称
-            limit: 获取的提交数量限制
-
-        Returns:
-            提交记录列表
-
-        Raises:
-            Exception: API 请求失败时抛出异常
+        获取仓库提交记录。sha 为分支名或提交 SHA，省略则使用 GitHub 默认分支。
         """
+        from urllib.parse import quote
+
         url = f"{self.base_url}/repos/{owner}/{repo}/commits?per_page={limit}"
+        if sha:
+            url += "&sha=" + quote(sha, safe="")
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=self._get_headers()) as response:
@@ -147,3 +146,46 @@ class GitHubAPIClient:
                 else:
                     error_text = await response.text()
                     raise Exception(f"GitHub API 错误 {response.status}: {error_text}")
+
+    async def compare_commits(
+        self, owner: str, repo: str, base: str, head: str
+    ) -> Dict[str, Any]:
+        """比较 base...head 两个引用之间的提交与文件 diff（含 patch）。"""
+        expr = f"{base}...{head}"
+        url = f"{self.base_url}/repos/{owner}/{repo}/compare/{expr}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=self._get_headers()) as response:
+                if response.status == 200:
+                    return await response.json()
+                error_text = await response.text()
+                raise Exception(f"GitHub API 错误 {response.status}: {error_text}")
+
+    async def list_commit_pulls(
+        self, owner: str, repo: str, commit_sha: str
+    ) -> List[Dict[str, Any]]:
+        """
+        与某提交关联的 Pull Request（标题、正文等），用于对齐任务点。
+        https://docs.github.com/en/rest/commits/commits#list-pull-requests-associated-with-a-commit
+        """
+        url = f"{self.base_url}/repos/{owner}/{repo}/commits/{commit_sha}/pulls"
+        headers = dict(self._get_headers())
+        headers["Accept"] = "application/vnd.github+json"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data if isinstance(data, list) else []
+                if response.status in (404, 422):
+                    return []
+                error_text = await response.text()
+                raise Exception(f"GitHub API 错误 {response.status}: {error_text}")
+
+    @staticmethod
+    def truncate_patch(patch: Optional[str], max_chars: int = 1200) -> str:
+        if not patch:
+            return ""
+        if len(patch) <= max_chars:
+            return patch
+        return patch[:max_chars] + "\n... [patch 已截断，节省 token]"

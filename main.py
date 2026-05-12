@@ -23,7 +23,7 @@ from astrbot.api import AstrBotConfig
 from .core.gist_manager import GistManager
 from .core.github_client import GitHubAPIClient
 from .core.change_digest import format_compare_for_prompt
-from .core.taskbook_schema import count_tasks_in_tree
+from .core.taskbook_schema import count_tasks_in_tree, is_taskbook_yaml_v1_document
 from .core import prompts
 from .core.web_server import (
     read_web_listen_config,
@@ -35,15 +35,13 @@ from .core.web_server import (
 def _parse_taskbook_yaml_v1(taskbook: str) -> Optional[dict]:
     """解析成功且为任务书 v1 时返回 dict，否则 None。"""
     tb = strip_fenced_markdown(taskbook or "")
+    if tb.startswith("\ufeff"):
+        tb = tb.lstrip("\ufeff")
     try:
         doc = yaml.safe_load(tb)
     except Exception:
         return None
-    if (
-        isinstance(doc, dict)
-        and doc.get("version") == 1
-        and isinstance(doc.get("tree"), list)
-    ):
+    if isinstance(doc, dict) and is_taskbook_yaml_v1_document(doc):
         return doc
     return None
 
@@ -154,7 +152,9 @@ class TaskWatcherPlugin(Star):
 • /watcher watch - 查看自上次 check 记录的提交起的增量 diff（hunk 截断预览）
 • /watcher status - 查看当前任务完成状态统计
 
-【网页只读面板】插件配置 web_server_port 为本机端口后，发 /watcher web 仅返回浏览器链接"""
+【网页只读面板】插件配置 web_server_port 为本机端口后：
+• /watcher web - 返回本机任务书面板链接（**同一用户复用同一个只读 token**，便于收藏书签）
+• /watcher web_new - **轮换**只读 token 并返回新链接（旧链接立即失效；怀疑 token 泄露或需换书签时用）"""
         yield event.plain_result(help_text)
 
     @watcher_group.command("set_token")
@@ -456,7 +456,7 @@ Gist: {cfg.get("gist_url")}"""
 
     @watcher_group.command("web", alias={"网页", "web_token"})
     async def cmd_web(self, event: AstrMessageEvent):
-        """仅返回本机任务书面板链接（内部复用/按需生成只读令牌）。"""
+        """返回本机任务书面板链接；只读 token 首次生成后写入配置并复用（链接稳定）。"""
         event.stop_event()
         user_id = self._get_user_id(event)
         if not user_id:
@@ -480,6 +480,31 @@ Gist: {cfg.get("gist_url")}"""
             cfg["web_read_token"] = token
             self._save_configs()
         yield event.plain_result(f"http://{host}:{port}/?token={token}")
+
+    @watcher_group.command("web_new", alias={"网页新链接", "刷新网页令牌"})
+    async def cmd_web_new(self, event: AstrMessageEvent):
+        """重新生成只读 token 并返回新链接（旧链接失效）。"""
+        event.stop_event()
+        user_id = self._get_user_id(event)
+        if not user_id:
+            yield event.plain_result("无法获取用户ID")
+            return
+        cfg = self.user_configs.get(user_id)
+        if not cfg:
+            yield event.plain_result("未配置")
+            return
+        host, port = read_web_listen_config(self.config)
+        if port <= 0:
+            yield event.plain_result(
+                "web_server_port 未启用（需在插件配置中设为大于 0 并重启）。"
+            )
+            return
+        token = secrets.token_urlsafe(24)
+        cfg["web_read_token"] = token
+        self._save_configs()
+        yield event.plain_result(
+            f"http://{host}:{port}/?token={token}\n（已轮换 token，旧书签失效）"
+        )
 
     # ============ 辅助方法 ============
 

@@ -91,10 +91,8 @@ class GistManager:
                     files = data.get("files", {})
                     if not files:
                         return None
-                    # 如果指定了文件名，查找对应文件
                     if filename and filename in files:
                         return files[filename].get("content")
-                    # 否则返回第一个文件的内容
                     first_file = list(files.values())[0]
                     return first_file.get("content")
                 return None

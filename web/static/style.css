@@ -56,6 +56,13 @@ body {
   word-break: break-all;
 }
 
+.notice-below-top {
+  max-width: 960px;
+  margin: 0.5rem auto 0;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
 .shell {
   flex: 1;
   display: flex;

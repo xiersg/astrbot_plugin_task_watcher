@@ -10,6 +10,19 @@
 
   let searchDebounce = null;
   let toolbarBound = false;
+  let lastYamlErr = "";
+
+  function domOk() {
+    return !!(app && notice && sidebar && searchEl && tocEl && meta);
+  }
+
+  if (!domOk()) {
+    document.body.insertAdjacentHTML(
+      "afterbegin",
+      '<p class="notice err" style="margin:1rem;">页面 DOM 不完整（需 #app #notice #sidebar #search #toc）。请更新插件中的 web/static 文件后重试。</p>'
+    );
+    return;
+  }
 
   function esc(s) {
     const d = document.createElement("div");
@@ -35,6 +48,9 @@
 
   function stripLeadingFence(text) {
     let t = (text || "").trim();
+    if (t.charCodeAt(0) === 0xfeff) {
+      t = t.slice(1).trim();
+    }
     if (t.startsWith("```")) {
       const lines = t.split(/\n/);
       if (lines.length && lines[0].startsWith("```")) lines.shift();
@@ -44,14 +60,48 @@
     return t;
   }
 
+  function taskbookVersionIsV1(v) {
+    if (v === true || v === false) return false;
+    if (v === null || v === undefined) return false;
+    if (typeof v === "string" && v.trim() === "") return false;
+    const n = Number(v);
+    return !isNaN(n) && n === 1;
+  }
+
   function tryParseYamlTaskbook(raw) {
-    if (typeof jsyaml === "undefined") return null;
+    lastYamlErr = "";
+    if (typeof jsyaml === "undefined" || !jsyaml.load) {
+      lastYamlErr = "js-yaml 未加载";
+      return null;
+    }
     const text = stripLeadingFence(raw);
+    if (!text) {
+      lastYamlErr = "内容为空";
+      return null;
+    }
     try {
       const doc = jsyaml.load(text);
-      if (doc && doc.version === 1 && Array.isArray(doc.tree)) return doc;
-    } catch (_e) {}
+      if (
+        doc &&
+        typeof doc === "object" &&
+        taskbookVersionIsV1(doc.version) &&
+        Array.isArray(doc.tree)
+      ) {
+        return doc;
+      }
+      lastYamlErr =
+        "根节点不符合 v1（需要可转为数字 1 的 version 与数组 tree）。实际 version=" +
+        JSON.stringify(doc && doc.version);
+    } catch (e) {
+      lastYamlErr = (e && e.message) || String(e);
+    }
     return null;
+  }
+
+  function nodeKind(node) {
+    return String((node && node.kind) || "")
+      .trim()
+      .toLowerCase();
   }
 
   function yamlTaskSearchText(node) {
@@ -154,7 +204,7 @@
     for (let i = 0; i < arr.length; i++) {
       const node = arr[i];
       if (!node || typeof node !== "object") continue;
-      const kind = node.kind;
+      const kind = nodeKind(node);
       if (kind === "section") {
         const t = String(node.title || "");
         const nextStack = stack.concat(t);
@@ -186,7 +236,7 @@
     for (let i = 0; i < arr.length; i++) {
       const node = arr[i];
       if (!node || typeof node !== "object") continue;
-      if (node.kind === "section") {
+      if (nodeKind(node) === "section") {
         const t = String(node.title || "");
         const next = stack.concat(t);
         const search = yamlSectionSearchStack(next);
@@ -194,7 +244,7 @@
         html += '<span class="toc-section-label">' + esc(t) + "</span>";
         html += buildTocFromNodes(node.children || [], next);
         html += "</li>";
-      } else if (node.kind === "task") {
+      } else if (nodeKind(node) === "task") {
         const t = String(node.title || "");
         const next = stack.concat(t);
         const sid = safeDomId(node.id);
@@ -239,10 +289,17 @@
   function filterTocRecursive(ul, queryTrimmed) {
     if (!ul) return false;
     let anyVisible = false;
-    const lis = ul.querySelectorAll(":scope > li");
-    for (let i = 0; i < lis.length; i++) {
-      const li = lis[i];
-      const nested = li.querySelector(":scope > ul.toc-tree");
+    for (let c = 0; c < ul.children.length; c++) {
+      const li = ul.children[c];
+      if (li.tagName !== "LI") continue;
+      let nested = null;
+      for (let j = 0; j < li.children.length; j++) {
+        const ch = li.children[j];
+        if (ch.tagName === "UL" && ch.classList.contains("toc-tree")) {
+          nested = ch;
+          break;
+        }
+      }
       let childAny = false;
       if (nested) childAny = filterTocRecursive(nested, queryTrimmed);
       const hay = (li.getAttribute("data-search") || "").toLowerCase();
@@ -255,23 +312,26 @@
   }
 
   function applySearch(queryTrimmed) {
+    if (!app) return;
     const cards = app.querySelectorAll("article.card");
     cards.forEach(function (card) {
       const hay = card.dataset.search || "";
       const ok = matchesSearch(hay, queryTrimmed);
       card.classList.toggle("search-hide", !ok);
     });
+    if (!tocEl) return;
     const rootUl = tocEl.querySelector("ul.toc-tree");
     filterTocRecursive(rootUl, queryTrimmed);
   }
 
   function buildTocYaml(doc) {
+    if (!tocEl) return;
     const inner = buildTocFromNodes(doc.tree || [], []);
     tocEl.innerHTML = '<div class="toc-title">目录</div>' + inner;
   }
 
   function bindToolbar() {
-    if (toolbarBound) return;
+    if (toolbarBound || !searchEl || !tocEl) return;
     toolbarBound = true;
 
     searchEl.addEventListener("input", function () {
@@ -297,6 +357,7 @@
   }
 
   function setSidebarVisible(show) {
+    if (!sidebar || !searchEl || !tocEl) return;
     sidebar.classList.toggle("is-hidden", !show);
     sidebar.setAttribute("aria-hidden", show ? "false" : "true");
     if (!show) {
@@ -312,53 +373,76 @@
     notice.style.display = "none";
     setSidebarVisible(false);
     app.innerHTML = '<p class="notice">加载中…</p>';
-    let res;
     try {
-      res = await fetch("/api/taskbook?token=" + encodeURIComponent(token));
-    } catch (e) {
+      let res;
+      try {
+        res = await fetch("/api/taskbook?token=" + encodeURIComponent(token), {
+          cache: "no-store",
+        });
+      } catch (e) {
+        app.innerHTML =
+          '<p class="notice err">无法连接后端（请确认插件已启动且 web_server_port 已配置）。</p>';
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        app.innerHTML =
+          '<p class="notice err">加载失败：' +
+          esc(data.error || "HTTP " + res.status) +
+          "</p>";
+        return;
+      }
+      meta.textContent =
+        "来源：" +
+        (data.source === "gist" ? "Gist（实时）" : "本地缓存") +
+        (data.gist_url ? " · " + data.gist_url : "");
+
+      const raw = data.taskbook || data.markdown || "";
+      const yamlDoc = tryParseYamlTaskbook(raw);
+
+      if (yamlDoc) {
+        const inner = renderTreeNodes(yamlDoc.tree || [], 0, []);
+        if (!inner || !String(inner).trim()) {
+          app.innerHTML =
+            '<p class="notice">已解析 YAML v1，但 <code>tree</code> 为空或没有可识别的 <code>section</code>/<code>task</code> 节点（请检查 <code>kind</code> 拼写）。</p>';
+          setSidebarVisible(false);
+          return;
+        }
+        let html = '<div class="items yaml-items">';
+        html += inner;
+        html += "</div>";
+        app.innerHTML = html;
+        buildTocYaml(yamlDoc);
+        setSidebarVisible(true);
+        bindToolbar();
+        applySearch("");
+        return;
+      }
+
+      let errHtml =
+        '<div class="preamble raw">' + esc(raw || "（空）") + "</div>";
+      if (typeof jsyaml === "undefined" || !jsyaml.load) {
+        errHtml +=
+          '<p class="notice err yaml-miss">未加载 js-yaml（请确认 /static/js-yaml.min.js 存在且未被拦截）。</p>';
+      } else {
+        errHtml +=
+          '<p class="notice err">无法作为 YAML v1 任务书解析。</p>' +
+          (lastYamlErr
+            ? '<p class="notice err parse-detail"><strong>原因：</strong>' +
+              esc(lastYamlErr) +
+              "</p>"
+            : "") +
+          '<p class="notice">请确认 Gist 正文以 <code>version: 1</code> 与 <code>tree:</code> 开头，或在机器人侧 <code>/watcher organize</code>。</p>';
+      }
+      app.innerHTML = errHtml;
+      setSidebarVisible(false);
+    } catch (err) {
       app.innerHTML =
-        '<p class="notice err">无法连接后端（请确认插件已启动且 web_server_port 已配置）。</p>';
-      return;
-    }
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) {
-      app.innerHTML =
-        '<p class="notice err">加载失败：' +
-        esc(data.error || "HTTP " + res.status) +
+        '<p class="notice err">页面脚本异常：' +
+        esc((err && err.message) || String(err)) +
         "</p>";
-      return;
+      setSidebarVisible(false);
     }
-    meta.textContent =
-      "来源：" +
-      (data.source === "gist" ? "Gist（实时）" : "本地缓存") +
-      (data.gist_url ? " · " + data.gist_url : "");
-
-    const raw = data.taskbook || data.markdown || "";
-    const yamlDoc = tryParseYamlTaskbook(raw);
-
-    if (yamlDoc) {
-      let html = '<div class="items yaml-items">';
-      html += renderTreeNodes(yamlDoc.tree || [], 0, []);
-      html += "</div>";
-      app.innerHTML = html;
-      buildTocYaml(yamlDoc);
-      setSidebarVisible(true);
-      bindToolbar();
-      applySearch("");
-      return;
-    }
-
-    let errHtml =
-      '<div class="preamble raw">' + esc(raw || "（空）") + "</div>";
-    if (typeof jsyaml === "undefined") {
-      errHtml +=
-        '<p class="notice err yaml-miss">未加载 js-yaml（CDN），无法解析任务书。请检查网络后刷新。</p>';
-    } else {
-      errHtml +=
-        '<p class="notice err">任务书必须是有效的 YAML v1（含 <code>version: 1</code> 与 <code>tree:</code>）。请在机器人侧执行 <code>/watcher organize</code> 或重新 <code>/watcher set_gist</code>。</p>';
-    }
-    app.innerHTML = errHtml;
-    setSidebarVisible(false);
   }
 
   load();

@@ -34,6 +34,8 @@ def read_web_listen_config(config_obj: Any) -> tuple[str, int]:
 
 def strip_fenced_markdown(text: str) -> str:
     t = (text or "").strip()
+    if t.startswith("\ufeff"):
+        t = t.lstrip("\ufeff").strip()
     if t.startswith("```"):
         lines = t.split("\n")
         if lines and lines[0].startswith("```"):
@@ -50,6 +52,14 @@ def _cors_headers() -> dict[str, str]:
         "Access-Control-Allow-Methods": "GET, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
     }
+
+
+def _no_store_headers() -> dict[str, str]:
+    """避免浏览器强缓存旧版前端（插件更新后仍用缓存的 app.js）。"""
+    h = dict(_cors_headers())
+    h["Cache-Control"] = "no-store, max-age=0, must-revalidate"
+    h["Pragma"] = "no-cache"
+    return h
 
 
 class TaskWatcherWebServer:
@@ -84,7 +94,7 @@ class TaskWatcherWebServer:
             return web.json_response(
                 {"ok": False, "error": "invalid_token"},
                 status=401,
-                headers=_cors_headers(),
+                headers=_no_store_headers(),
             )
         gist_id = cfg.get("gist_id")
         gh_token = cfg.get("token")
@@ -107,7 +117,7 @@ class TaskWatcherWebServer:
             return web.json_response(
                 {"ok": False, "error": str(e)},
                 status=500,
-                headers=_cors_headers(),
+                headers=_no_store_headers(),
             )
         return web.json_response(
             {
@@ -116,7 +126,7 @@ class TaskWatcherWebServer:
                 "source": source,
                 "gist_url": cfg.get("gist_url"),
             },
-            headers=_cors_headers(),
+            headers=_no_store_headers(),
         )
 
     async def _handle_static(self, request: web.Request) -> web.StreamResponse:
@@ -126,7 +136,7 @@ class TaskWatcherWebServer:
         path = self.static_dir / rel
         if not path.is_file():
             raise web.HTTPNotFound()
-        return web.FileResponse(path, headers=_cors_headers())
+        return web.FileResponse(path, headers=_no_store_headers())
 
     async def _handle_index(self, _request: web.Request) -> web.StreamResponse:
         index = self.static_dir / "index.html"
@@ -134,8 +144,9 @@ class TaskWatcherWebServer:
             return web.Response(
                 text="静态文件缺失：请检查插件 web/static/index.html",
                 content_type="text/plain; charset=utf-8",
+                headers=_no_store_headers(),
             )
-        return web.FileResponse(index, headers=_cors_headers())
+        return web.FileResponse(index, headers=_no_store_headers())
 
     def build_app(self) -> web.Application:
         app = web.Application()

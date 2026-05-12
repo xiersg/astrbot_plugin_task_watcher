@@ -366,6 +366,34 @@ article.card.search-hide {
   padding: 0;
 }
 
+.detail-body.detail-rich {
+  line-height: 1.65;
+}
+
+.tb-pill {
+  display: inline-block;
+  vertical-align: 0.12em;
+  padding: 0.1em 0.42em;
+  margin: 0.1em 0.12em 0.1em 0;
+  font-size: 0.86em;
+  font-weight: 500;
+  border-radius: 6px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.tb-pill-date {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--border-strong);
+}
+
+.tb-pill-user {
+  color: #166534;
+  background: #ecfdf5;
+  border: 1px solid #86efac;
+}
+
 .contrib-avatars {
   display: flex;
   flex-wrap: wrap;
@@ -508,6 +536,58 @@ article.card.search-hide {
   color: var(--accent);
 }
 
+.hm-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.hm-title-row .hm-title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 8rem;
+}
+
+.hm-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.hm-nav-range {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hm-nav-btn {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--accent);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hm-nav-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.hm-nav-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 .hm-meta {
   margin: 0;
   font-size: 0.82rem;
@@ -601,6 +681,32 @@ article.card.search-hide {
   height: 12px;
   border-radius: 3px;
   border: 1px solid rgba(15, 23, 42, 0.06);
+  flex-shrink: 0;
+}
+
+.hm-leg.hm-l0 {
+  background: #e2e8f0;
+}
+
+.hm-leg.hm-l1 {
+  background: #bfdbfe;
+}
+
+.hm-leg.hm-l2 {
+  background: #93c5fd;
+}
+
+.hm-leg.hm-l3 {
+  background: #3b82f6;
+}
+
+.hm-leg.hm-l4 {
+  background: #1d4ed8;
+}
+
+.hm-legend-lbl {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
 }
 
 .hm-hint {

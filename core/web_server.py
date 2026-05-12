@@ -158,11 +158,12 @@ class TaskWatcherWebServer:
                 },
                 headers=_no_store_headers(),
             )
-        raw_days = request.query.get("days") or "371"
+        range_end_q = (request.query.get("range_end") or "").strip() or None
+        raw_rd = request.query.get("range_days") or "90"
         try:
-            days = int(raw_days)
+            range_days = int(raw_rd)
         except (TypeError, ValueError):
-            days = 371
+            range_days = 90
         try:
             owner, name = parse_repo_slug(repo_s)
         except ValueError as e:
@@ -173,7 +174,13 @@ class TaskWatcherWebServer:
             )
         try:
             client = GitHubAPIClient(gh_token)
-            payload = await build_contributions_calendar(client, owner, name, days)
+            payload = await build_contributions_calendar(
+                client,
+                owner,
+                name,
+                range_end=range_end_q,
+                range_days=range_days,
+            )
             return web.json_response(payload, headers=_no_store_headers())
         except Exception as e:
             logger.exception("web /api/contributions: %s", e)

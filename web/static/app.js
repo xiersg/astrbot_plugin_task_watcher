@@ -141,6 +141,35 @@
     return out;
   }
 
+  /**
+   * 将 @GitHub登录名 与常见日期格式包成圆角标签；@ 在展示中去掉。
+   * 其余文本走 esc。
+   */
+  function tbRichPills(text) {
+    var s = String(text || "");
+    var re = /(@[a-zA-Z0-9](?:-?[a-zA-Z0-9]){0,38})|(\d{4}-\d{2}-\d{2})|(\d{4}\/\d{1,2}\/\d{1,2})/g;
+    var out = [];
+    var last = 0;
+    var m;
+    while ((m = re.exec(s)) !== null) {
+      if (m.index > last) {
+        out.push(esc(s.slice(last, m.index)));
+      }
+      if (m[1]) {
+        var login = m[1].slice(1);
+        out.push('<span class="tb-pill tb-pill-user">' + esc(login) + "</span>");
+      } else {
+        var d = m[2] || m[3];
+        out.push('<span class="tb-pill tb-pill-date">' + esc(d) + "</span>");
+      }
+      last = m.index + m[0].length;
+    }
+    if (last < s.length) {
+      out.push(esc(s.slice(last)));
+    }
+    return out.join("");
+  }
+
   function renderYamlTaskCard(node, depth, pathStack) {
     const title = String(node.title || "（无标题）");
     const sid = safeDomId(node.id);
@@ -154,8 +183,10 @@
     const completeEmpty = isBlank(completion);
     const descEmpty = isBlank(desc);
 
-    const contribClass = "detail-body" + (contribEmpty ? " is-empty" : "");
-    const completeClass = "detail-body" + (completeEmpty ? " is-empty" : "");
+    const contribClass =
+      "detail-body detail-rich" + (contribEmpty ? " is-empty" : "");
+    const completeClass =
+      "detail-body detail-rich" + (completeEmpty ? " is-empty" : "");
     const descClass = "detail-body" + (descEmpty ? " is-empty" : "");
 
     const h = [];
@@ -222,7 +253,7 @@
       contribInner =
         avatarParts.join("") +
         '<div class="contrib-text">' +
-        esc(contribution) +
+        tbRichPills(contribution) +
         "</div>";
     }
     h.push('<div class="' + contribClass + '">' + contribInner + "</div>");
@@ -230,7 +261,11 @@
     h.push('<div class="detail-block">');
     h.push("<h4>完成情况</h4>");
     h.push(
-      '<div class="' + completeClass + '">' + (completeEmpty ? "" : esc(completion)) + "</div>"
+      '<div class="' +
+        completeClass +
+        '">' +
+        (completeEmpty ? "" : tbRichPills(completion)) +
+        "</div>"
     );
     h.push("</div>");
     h.push("</div>");
@@ -410,9 +445,15 @@
   }
 
   var HM_DAY_MS = 86400000;
+  var HM_PAGE_DAYS = 90;
   var hmTooltipEl = null;
   var hmModalEl = null;
   var hmModalKeyHandler = null;
+
+  function hmAddDaysYmd(ymd, deltaDays) {
+    var ms = hmParseDay(ymd) + deltaDays * HM_DAY_MS;
+    return hmUtcDayKey(ms);
+  }
 
   function ensureHmTooltip() {
     if (hmTooltipEl) return hmTooltipEl;
@@ -503,18 +544,40 @@
       data.days || {},
       maxA
     );
+    var today = data.today_utc || hmUtcDayKey(Date.now());
+    var canNext = String(data.range_end || "") < String(today);
+    var canPrev = hmParseDay(data.range_start || "2010-01-01") > Date.UTC(2008, 0, 1);
     var h = [];
     h.push('<div class="hm-inner">');
     h.push('<div class="hm-head">');
+    h.push('<div class="hm-title-row">');
     h.push('<h2 class="hm-title">贡献热力图</h2>');
+    h.push('<div class="hm-nav" role="toolbar" aria-label="切换统计时段">');
+    h.push(
+      '<button type="button" class="hm-nav-btn" data-hm-nav="prev"' +
+        (canPrev ? "" : " disabled") +
+        ' aria-label="更早">‹</button>'
+    );
+    h.push(
+      '<span class="hm-nav-range">' +
+        esc(data.range_start || "") +
+        " ~ " +
+        esc(data.range_end || "") +
+        "</span>"
+    );
+    h.push(
+      '<button type="button" class="hm-nav-btn" data-hm-nav="next"' +
+        (canNext ? "" : " disabled") +
+        ' aria-label="更晚">›</button>'
+    );
+    h.push("</div>");
+    h.push("</div>");
     h.push(
       '<p class="hm-meta"><span class="hm-repo">' +
         esc(data.repo || "") +
         "</span> · <span>" +
-        esc(data.range_start || "") +
-        " ~ " +
-        esc(data.range_end || "") +
-        "</span></p>"
+        esc(String(data.range_days || HM_PAGE_DAYS)) +
+        " 天/页 · UTC</span></p>"
     );
     if (data.utc_note) h.push('<p class="hm-note">' + esc(data.utc_note) + "</p>");
     if (data.pr_search_truncated) {
@@ -564,13 +627,14 @@
       h.push("</div>");
     }
     h.push("</div></div>");
-    h.push('<div class="hm-legend"><span class="hm-legend-lbl">少</span>');
-    for (var lj = 0; lj < 5; lj++) {
-      h.push('<span class="hm-leg hm-l' + lj + '" aria-hidden="true"></span>');
+    h.push('<div class="hm-legend" aria-hidden="true">');
+    h.push('<span class="hm-legend-lbl">多</span>');
+    for (var lj = 4; lj >= 0; lj--) {
+      h.push('<span class="hm-leg hm-l' + lj + '"></span>');
     }
-    h.push('<span class="hm-legend-lbl">多</span></div>');
+    h.push('<span class="hm-legend-lbl">少</span></div>');
     h.push(
-      '<p class="hm-hint">悬停查看当日贡献者；点击可查看排行榜与提交、PR 列表。</p>'
+      '<p class="hm-hint">悬停查看当日贡献者；点击格子查看排行榜与提交、PR 列表。箭头切换约三个月窗口并重新加载。</p>'
     );
     h.push("</div>");
     return h.join("");
@@ -699,56 +763,98 @@
     document.addEventListener("keydown", hmModalKeyHandler);
   }
 
-  function bindHeatmapInteractions(data, sectionEl) {
-    window.__hmCalData = data;
-    var tip = ensureHmTooltip();
-    sectionEl.addEventListener("mousemove", function (e) {
-      var cell = e.target.closest(".hm-cell");
-      if (!cell || !sectionEl.contains(cell)) {
-        hideHmTooltip();
-        return;
-      }
-      var dk = cell.getAttribute("data-date") || "";
-      var ir = cell.getAttribute("data-in-range") === "1";
-      var text = dk;
-      if (ir) {
-        var day = data.days && data.days[dk];
-        var cc = day ? day.commit_count || 0 : 0;
-        var pc = day ? day.pr_count || 0 : 0;
-        text += "\n提交 " + cc + " · PR " + pc;
-        var cg = day && day.contributors ? day.contributors : [];
-        if (cg.length) text += "\n" + cg.map(function (x) { return "@" + x; }).join(" ");
-        else if (cc + pc > 0) text += "\n（贡献者见排行榜）";
-      } else {
-        text += "\n不在统计区间";
-      }
-      tip.textContent = text;
-      tip.style.opacity = "1";
-      tip.style.visibility = "visible";
-      tip.style.left = Math.min(window.innerWidth - 220, e.clientX + 14) + "px";
-      tip.style.top = Math.min(window.innerHeight - 80, e.clientY + 14) + "px";
-    });
-    sectionEl.addEventListener("mouseleave", function () {
-      hideHmTooltip();
-    });
-    sectionEl.addEventListener("click", function (e) {
-      var cell = e.target.closest(".hm-cell");
-      if (!cell || !sectionEl.contains(cell)) return;
-      if (cell.getAttribute("data-in-range") !== "1") return;
-      var dateKey = cell.getAttribute("data-date");
-      if (!dateKey) return;
-      openHmModal(dateKey, window.__hmCalData || data);
-    });
+  function bindHeatmapNav(sectionEl, tok, data) {
+    var prev = sectionEl.querySelector('[data-hm-nav="prev"]');
+    var next = sectionEl.querySelector('[data-hm-nav="next"]');
+    var rd = data.range_days || HM_PAGE_DAYS;
+    var today = data.today_utc || hmUtcDayKey(Date.now());
+    function loadEnd(nextEnd) {
+      sectionEl.innerHTML =
+        '<div class="hm-inner"><p class="notice hm-loading">加载贡献热力图…</p></div>';
+      loadContributionsHeatmap(tok, nextEnd, rd);
+    }
+    if (prev) {
+      prev.addEventListener("click", function () {
+        if (prev.disabled) return;
+        var rs = data.range_start;
+        loadEnd(hmAddDaysYmd(rs, -1));
+      });
+    }
+    if (next) {
+      next.addEventListener("click", function () {
+        if (next.disabled) return;
+        var re = data.range_end;
+        var newStart = hmAddDaysYmd(re, 1);
+        if (hmParseDay(newStart) > hmParseDay(today)) return;
+        var endMs = Math.min(
+          hmParseDay(newStart) + (rd - 1) * HM_DAY_MS,
+          hmParseDay(today)
+        );
+        loadEnd(hmUtcDayKey(endMs));
+      });
+    }
   }
 
-  async function loadContributionsHeatmap(tok) {
+  function bindHeatmapInteractions(data, sectionEl, tok) {
+    window.__hmCalData = data;
+    var tip = ensureHmTooltip();
+    if (!sectionEl.dataset.hmBound) {
+      sectionEl.dataset.hmBound = "1";
+      sectionEl.addEventListener("mousemove", function (e) {
+        var cal = window.__hmCalData || {};
+        var cell = e.target.closest(".hm-cell");
+        if (!cell || !sectionEl.contains(cell)) {
+          hideHmTooltip();
+          return;
+        }
+        var dk = cell.getAttribute("data-date") || "";
+        var ir = cell.getAttribute("data-in-range") === "1";
+        var text = dk;
+        if (ir) {
+          var day = cal.days && cal.days[dk];
+          var cc = day ? day.commit_count || 0 : 0;
+          var pc = day ? day.pr_count || 0 : 0;
+          text += "\n提交 " + cc + " · PR " + pc;
+          var cg = day && day.contributors ? day.contributors : [];
+          if (cg.length) text += "\n" + cg.map(function (x) { return "@" + x; }).join(" ");
+          else if (cc + pc > 0) text += "\n（贡献者见排行榜）";
+        } else {
+          text += "\n不在统计区间";
+        }
+        tip.textContent = text;
+        tip.style.opacity = "1";
+        tip.style.visibility = "visible";
+        tip.style.left = Math.min(window.innerWidth - 220, e.clientX + 14) + "px";
+        tip.style.top = Math.min(window.innerHeight - 80, e.clientY + 14) + "px";
+      });
+      sectionEl.addEventListener("mouseleave", function () {
+        hideHmTooltip();
+      });
+      sectionEl.addEventListener("click", function (e) {
+        if (e.target.closest(".hm-nav")) return;
+        var cell = e.target.closest(".hm-cell");
+        if (!cell || !sectionEl.contains(cell)) return;
+        if (cell.getAttribute("data-in-range") !== "1") return;
+        var dateKey = cell.getAttribute("data-date");
+        if (!dateKey) return;
+        openHmModal(dateKey, window.__hmCalData || {});
+      });
+    }
+    bindHeatmapNav(sectionEl, tok, data);
+  }
+
+  async function loadContributionsHeatmap(tok, rangeEndYmd, rangeDays) {
     var sec = document.getElementById("contrib-heatmap-section");
     if (!sec || !tok) return;
+    var rd = rangeDays != null ? rangeDays : HM_PAGE_DAYS;
     try {
-      var res = await fetch(
-        "/api/contributions?token=" + encodeURIComponent(tok) + "&days=371",
-        { cache: "no-store" }
-      );
+      var qs =
+        "/api/contributions?token=" +
+        encodeURIComponent(tok) +
+        "&range_days=" +
+        encodeURIComponent(String(rd));
+      if (rangeEndYmd) qs += "&range_end=" + encodeURIComponent(rangeEndYmd);
+      var res = await fetch(qs, { cache: "no-store" });
       var payload = await res.json().catch(function () {
         return {};
       });
@@ -767,7 +873,7 @@
         return;
       }
       sec.innerHTML = renderHeatmapHTML(payload);
-      bindHeatmapInteractions(payload, sec);
+      bindHeatmapInteractions(payload, sec, tok);
     } catch (err) {
       sec.innerHTML =
         '<div class="hm-inner"><p class="notice err hm-msg">' +

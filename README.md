@@ -22,8 +22,23 @@
 | `/watcher watch` | 仅预览增量 diff（不写任务书） |
 | `/watcher status` | 任务书统计（YAML task 数） |
 | `/watcher config` | 当前配置摘要 |
-| `/watcher web` | 本机只读面板（需配置 `web_server_port`）；**同一用户复用固定 token**，链接不变便于收藏 |
+| `/watcher web` | 只读面板链接（需 `web_server_port`）；外网部署需配 `web_public_base_url`，见下文 |
 | `/watcher web_new` | **轮换**只读 token 并返回新链接（旧链接失效） |
+
+## 只读网页（Ubuntu / 飞书打不开的常见原因）
+
+默认 **`web_server_host` = `127.0.0.1`** 时，服务只监听本机回环；`/watcher web` 返回的 `http://127.0.0.1:端口/` 在飞书里点，会连到你**手机/电脑自己**，连不到服务器。
+
+**推荐做法：**
+
+1. 插件配置 **`web_server_host`** 改为 **`0.0.0.0`**（对所有网卡监听）。
+2. 插件配置 **`web_public_base_url`** 填外网能访问的**完整前缀**（不要末尾 `/`），例如：
+   - `http://你的公网IP:1379`
+   - 或经 Nginx/Caddy 反代后的 `https://taskbook.example.com`
+3. 系统防火墙 / 云安全组 **放行** `web_server_port`（如 1379）。
+4. 重载插件后再发 **`/watcher web`**，应得到以 `web_public_base_url` 开头的链接。
+
+隧道（frp、cloudflared 等）时，**`web_public_base_url` 应填隧道暴露给浏览器的那个地址**，与隧道入口一致。
 
 ## 配置步骤
 

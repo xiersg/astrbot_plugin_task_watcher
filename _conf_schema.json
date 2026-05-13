@@ -13,8 +13,14 @@
   },
   "web_server_host": {
     "type": "string",
-    "description": "本地 Web 服务绑定地址",
-    "hint": "默认 127.0.0.1",
+    "description": "HTTP 监听绑定地址。本机调试可用 127.0.0.1；服务器要对飞书/外网开放请填 0.0.0.0，并务必配置 web_public_base_url",
+    "hint": "默认 127.0.0.1；公网访问请改为 0.0.0.0",
     "default": "127.0.0.1"
+  },
+  "web_public_base_url": {
+    "type": "string",
+    "description": "发给用户的完整链接前缀（无路径），用于飞书等外网打开面板。例如 http://1.2.3.4:1379 或 https://taskbook.example.com。留空则对 127.0.0.1 监听会生成仅本机可用的链接",
+    "hint": "与 web_server_port 对应；含协议，不要末尾斜杠。反代 HTTPS 时填公网域名",
+    "default": ""
   }
 }

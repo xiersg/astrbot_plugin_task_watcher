@@ -269,7 +269,9 @@ class TaskWatcherWebServer:
         app.router.add_get("/api/contributions", self._handle_api_contributions)
         app.router.add_options("/api/contributions", self._handle_options)
         app.router.add_get("/", self._handle_index)
+        app.router.add_head("/", self._handle_index)
         app.router.add_get("/static/{path:.*}", self._handle_static)
+        app.router.add_head("/static/{path:.*}", self._handle_static)
         return app
 
     async def start(self) -> None:

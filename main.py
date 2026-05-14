@@ -21,7 +21,7 @@ from astrbot.api import logger
 from astrbot.api import AstrBotConfig
 
 from .core.gist_manager import GistManager
-from .core.github_client import GitHubAPIClient
+from .core.github_client import GitHubAPIClient, GitHubTimeoutError
 from .core.change_digest import format_compare_for_prompt
 from .core.taskbook_schema import count_tasks_in_tree, is_taskbook_yaml_v1_document
 from .core import prompts
@@ -210,7 +210,11 @@ class TaskWatcherPlugin(Star):
 
         # 下载任务书
         gist_mgr = GistManager(token)
-        content = await gist_mgr.get_gist_content(gist_id)
+        try:
+            content = await gist_mgr.get_gist_content(gist_id)
+        except GitHubTimeoutError as e:
+            yield event.plain_result(f"❌ {e}")
+            return
         if not content:
             yield event.plain_result("❌ 无法获取 Gist 内容，请检查 Token 和 URL")
             return

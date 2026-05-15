@@ -7,11 +7,9 @@ Gist 管理模块
 - 获取 Gist 内容
 """
 
-from typing import Dict, Optional
-
+import aiohttp
+from typing import Optional, Dict
 from astrbot.api import logger
-
-from .github_client import github_http_session
 
 
 class GistManager:
@@ -43,7 +41,7 @@ class GistManager:
             }
         }
 
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=self._get_headers(), json=payload) as resp:
                 if resp.status == 201:
                     data = await resp.json()
@@ -58,7 +56,7 @@ class GistManager:
 
         # 如果没有指定文件名，先获取 Gist 信息
         if not filename:
-            async with github_http_session() as session:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=self._get_headers()) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -78,7 +76,7 @@ class GistManager:
             }
         }
 
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.patch(url, headers=self._get_headers(), json=payload) as resp:
                 return resp.status == 200
 
@@ -86,7 +84,7 @@ class GistManager:
         """获取 Gist 内容，如果不指定文件名则返回第一个文件的内容"""
         url = f"{self.base_url}/gists/{gist_id}"
 
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=self._get_headers()) as resp:
                 if resp.status == 200:
                     data = await resp.json()

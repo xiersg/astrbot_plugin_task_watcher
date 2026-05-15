@@ -14,7 +14,7 @@ from aiohttp import web
 from astrbot.api import logger
 
 from .gist_manager import GistManager
-from .github_client import GitHubAPIClient, GitHubTimeoutError
+from .github_client import GitHubAPIClient
 from .contributions_agg import build_contributions_calendar, parse_repo_slug
 
 
@@ -145,17 +145,6 @@ class TaskWatcherWebServer:
                     str(cfg.get("taskbook_content") or "")
                 )
                 source = "local"
-        except GitHubTimeoutError as e:
-            logger.warning("web /api/taskbook: GitHub timeout: %s", e)
-            return web.json_response(
-                {
-                    "ok": False,
-                    "error": "github_timeout",
-                    "message": str(e),
-                },
-                status=504,
-                headers=_no_store_headers(),
-            )
         except Exception as e:
             logger.exception("web /api/taskbook: %s", e)
             return web.json_response(
@@ -224,17 +213,6 @@ class TaskWatcherWebServer:
                 range_days=range_days,
             )
             return web.json_response(payload, headers=_no_store_headers())
-        except GitHubTimeoutError as e:
-            logger.warning("web /api/contributions: GitHub timeout: %s", e)
-            return web.json_response(
-                {
-                    "ok": False,
-                    "error": "github_timeout",
-                    "message": str(e),
-                },
-                status=504,
-                headers=_no_store_headers(),
-            )
         except Exception as e:
             logger.exception("web /api/contributions: %s", e)
             return web.json_response(

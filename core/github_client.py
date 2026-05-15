@@ -11,40 +11,12 @@ GitHub API 客户端模块
 - 策略模式：不同的 API 调用策略
 """
 
-import asyncio
 import re
-from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
+import aiohttp
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
-import aiohttp
 from astrbot.api import logger
-
-# 连接 / 读响应超时，避免长时间挂起；总时长略大于多页拉取常见耗时
-GITHUB_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=90, connect=20, sock_read=45)
-
-GITHUB_TIMEOUT_USER_MSG = (
-    "连接 GitHub API 超时，请检查网络、防火墙或代理（如 HTTPS_PROXY）后重试。"
-)
-
-
-class GitHubTimeoutError(Exception):
-    """访问 api.github.com 请求超时（由 ClientTimeout 触发）。"""
-
-    def __init__(self, message: str = GITHUB_TIMEOUT_USER_MSG):
-        super().__init__(message)
-
-
-@asynccontextmanager
-async def github_http_session() -> AsyncIterator[aiohttp.ClientSession]:
-    """ClientSession with timeouts; raises GitHubTimeoutError on timeout."""
-    session = aiohttp.ClientSession(timeout=GITHUB_HTTP_TIMEOUT)
-    try:
-        yield session
-    except (asyncio.TimeoutError, TimeoutError):
-        raise GitHubTimeoutError() from None
-    finally:
-        await session.close()
 
 
 class GitHubAPIClient:
@@ -84,7 +56,7 @@ class GitHubAPIClient:
         if sha:
             url += "&sha=" + quote(sha, safe="")
 
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=self._get_headers()) as response:
                 if response.status == 200:
                     commits = await response.json()
@@ -122,7 +94,7 @@ class GitHubAPIClient:
         url = f"{path}?since={quote(since_iso, safe='')}&per_page=100"
         out: List[Dict[str, Any]] = []
         page = 0
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             while url and page < max_pages:
                 page += 1
                 async with session.get(url, headers=self._get_headers()) as resp:
@@ -180,7 +152,7 @@ class GitHubAPIClient:
         )
         out: List[Dict[str, Any]] = []
         page = 0
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             while url and page < max_pages:
                 page += 1
                 async with session.get(url, headers=self._get_headers()) as resp:
@@ -236,7 +208,7 @@ class GitHubAPIClient:
         per_page = 100
         max_page = max(1, (max_results + per_page - 1) // per_page)
         total_count = 0
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             for page in range(1, max_page + 1):
                 url = (
                     f"{self.base_url}/search/issues?q={quote(q, safe='')}"
@@ -305,7 +277,7 @@ class GitHubAPIClient:
         per_page = 100
         max_page = max(1, (max_results + per_page - 1) // per_page)
         total_count = 0
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             for page in range(1, max_page + 1):
                 url = (
                     f"{self.base_url}/search/issues?q={quote(q, safe='')}"
@@ -371,7 +343,7 @@ class GitHubAPIClient:
         """
         url = f"{self.base_url}/repos/{owner}/{repo}/commits/{sha}"
 
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=self._get_headers()) as response:
                 if response.status == 200:
                     detail = await response.json()
@@ -396,7 +368,7 @@ class GitHubAPIClient:
         """
         url = f"{self.base_url}/repos/{owner}/{repo}"
 
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=self._get_headers()) as response:
                 if response.status == 200:
                     repo_info = await response.json()
@@ -424,7 +396,7 @@ class GitHubAPIClient:
         """
         url = f"{self.base_url}/repos/{owner}/{repo}/contents/{path}?ref={ref}"
 
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=self._get_headers()) as response:
                 if response.status == 200:
                     data = await response.json()
@@ -443,7 +415,7 @@ class GitHubAPIClient:
         expr = f"{base}...{head}"
         url = f"{self.base_url}/repos/{owner}/{repo}/compare/{expr}"
 
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=self._get_headers()) as response:
                 if response.status == 200:
                     return await response.json()
@@ -461,7 +433,7 @@ class GitHubAPIClient:
         headers = dict(self._get_headers())
         headers["Accept"] = "application/vnd.github+json"
 
-        async with github_http_session() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()

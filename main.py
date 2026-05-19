@@ -532,11 +532,11 @@ Gist: {cfg.get("gist_url")}"""
         """隐藏自检：只读探测配置/GitHub/Gist/Web，不调用 AI（不出现在 help）。"""
         event.stop_event()
         user_id = self._get_user_id(event)
-        yield event.plain_result("🧪 TaskWatcher 自检开始…")
         try:
+            # 勿在 await 前 yield：AstrBot 首条回复后会 after_message_sent 终止管道（QQ 等仅见半句）
             steps = await run_watcher_self_test(self, user_id)
-            for chunk in format_test_report(user_id, steps):
-                yield event.plain_result(chunk)
+            chunks = format_test_report(user_id, steps)
+            yield event.plain_result("\n\n".join(chunks))
         except Exception as e:
             logger.exception("watcher test")
             yield event.plain_result(f"❌ 自检异常: {e}")

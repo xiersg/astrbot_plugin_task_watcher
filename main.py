@@ -70,7 +70,7 @@ def _instruction_after_tasks_edit_command(event: AstrMessageEvent) -> str:
     return ""
 
 
-@register("astrbot_plugin_task_watcher", "xiersg", "检测Git仓库变化，分析任务完成情况", "1.1.0")
+@register("astrbot_plugin_task_watcher", "xiersg", "检测Git仓库变化，分析任务完成情况", "1.1.1")
 class TaskWatcherPlugin(Star):
     """任务监听插件"""
 

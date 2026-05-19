@@ -25,6 +25,7 @@ from .core.github_client import GitHubAPIClient
 from .core.change_digest import format_compare_for_prompt
 from .core.taskbook_schema import count_tasks_in_tree, is_taskbook_yaml_v1_document
 from .core import prompts
+from .core.diagnostics import format_test_report, run_watcher_self_test
 from .core.web_server import (
     read_web_listen_config,
     strip_fenced_markdown,
@@ -525,6 +526,20 @@ Gist: {cfg.get("gist_url")}"""
         yield event.plain_result(
             url + "\n（已轮换 token，旧书签失效）" + (f"\n\n{hint}" if hint else "")
         )
+
+    @watcher_group.command("test")
+    async def cmd_test(self, event: AstrMessageEvent):
+        """隐藏自检：只读探测配置/GitHub/Gist/Web，不调用 AI（不出现在 help）。"""
+        event.stop_event()
+        user_id = self._get_user_id(event)
+        yield event.plain_result("🧪 TaskWatcher 自检开始…")
+        try:
+            steps = await run_watcher_self_test(self, user_id)
+            for chunk in format_test_report(user_id, steps):
+                yield event.plain_result(chunk)
+        except Exception as e:
+            logger.exception("watcher test")
+            yield event.plain_result(f"❌ 自检异常: {e}")
 
     @watcher_group.command("tasks_edit", alias={"任务书编辑", "编辑任务"})
     async def cmd_tasks_edit(self, event: AstrMessageEvent):

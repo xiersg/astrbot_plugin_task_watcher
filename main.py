@@ -134,6 +134,16 @@ class TaskWatcherPlugin(Star):
             return a.strip(), b.split("/")[0].strip()
         raise ValueError("仓库格式应为 owner/repo 或 https://github.com/owner/repo")
 
+    @staticmethod
+    def _watch_branch(cfg: Dict[str, Any], repo_info: Optional[Dict[str, Any]] = None) -> str:
+        """监视分支：配置 watch_branch 优先，否则用 GitHub 默认分支。"""
+        explicit = str(cfg.get("watch_branch") or "").strip()
+        if explicit:
+            return explicit
+        if repo_info:
+            return str(repo_info.get("default_branch") or "main")
+        return "main"
+
     # ============ 指令 ============
 
     @filter.command_group("watcher")
@@ -154,8 +164,10 @@ class TaskWatcherPlugin(Star):
 
 • /watcher set_gist <gist_url> - 设置任务书 Gist；下载后会 **自动 AI 编排为 YAML** 并写回 Gist（失败则保留原文，可再发 /watcher organize）
 
-• /watcher set_repo <repo> - 设置要监视的仓库
-  格式: 用户名/仓库名 (如: owner/repo)
+• /watcher set_repo <repo> [分支] - 设置要监视的仓库（分支可选，省略则用 GitHub 默认分支）
+  格式: owner/repo 或 owner/repo develop
+
+• /watcher set_branch [分支] - 单独设置/清除监视分支（留空清除，恢复默认分支）
 
 • /watcher config - 查看当前配置
 
@@ -238,8 +250,8 @@ class TaskWatcherPlugin(Star):
         yield event.plain_result("\n".join(lines))
 
     @watcher_group.command("set_repo")
-    async def cmd_set_repo(self, event: AstrMessageEvent, repo: str):
-        """设置监视仓库: /watcher set_repo <repo>"""
+    async def cmd_set_repo(self, event: AstrMessageEvent, repo: str, branch: str = ""):
+        """设置监视仓库: /watcher set_repo <repo> [分支]"""
         event.stop_event()
         user_id = self._get_user_id(event)
         if not user_id:
@@ -257,8 +269,39 @@ class TaskWatcherPlugin(Star):
             self.user_configs[user_id] = {}
 
         self.user_configs[user_id]["repo"] = normalized
+        br = (branch or "").strip()
+        if br:
+            self.user_configs[user_id]["watch_branch"] = br
+        else:
+            self.user_configs[user_id].pop("watch_branch", None)
         self._save_configs()
-        yield event.plain_result(f"✅ 仓库已设置: {normalized}")
+        branch_line = (
+            f"监视分支: {br}" if br else "监视分支: GitHub 默认分支（未单独指定）"
+        )
+        yield event.plain_result(f"✅ 仓库已设置: {normalized}\n{branch_line}")
+
+    @watcher_group.command("set_branch")
+    async def cmd_set_branch(self, event: AstrMessageEvent, branch: str = ""):
+        """设置监视分支；留空则恢复 GitHub 默认分支"""
+        event.stop_event()
+        user_id = self._get_user_id(event)
+        if not user_id:
+            yield event.plain_result("无法获取用户ID")
+            return
+        if user_id not in self.user_configs:
+            self.user_configs[user_id] = {}
+        if not self.user_configs[user_id].get("repo"):
+            yield event.plain_result("请先 /watcher set_repo <owner/repo>")
+            return
+        br = (branch or "").strip()
+        if br:
+            self.user_configs[user_id]["watch_branch"] = br
+            msg = f"✅ 监视分支已设为: {br}"
+        else:
+            self.user_configs[user_id].pop("watch_branch", None)
+            msg = "✅ 已清除自定义分支，将使用 GitHub 默认分支"
+        self._save_configs()
+        yield event.plain_result(msg)
 
     @watcher_group.command("config")
     async def cmd_config(self, event: AstrMessageEvent):
@@ -277,8 +320,10 @@ class TaskWatcherPlugin(Star):
             if sha
             else "未记录（首次 /watcher check 成功后会记下当前 HEAD）"
         )
+        watch_br = (cfg.get("watch_branch") or "").strip() or "（GitHub 默认分支）"
         text = f"""📋 配置信息
 仓库: {cfg.get('repo')}
+监视分支: {watch_br}
 Gist: {cfg.get('gist_url')}
 Token: {'✅ 已设置' if cfg.get('token') else '❌ 未设置'}
 上次检查: {cfg.get('last_check', '从未')}
@@ -681,7 +726,8 @@ Gist: {cfg.get("gist_url")}"""
 
     async def _get_repo_changes(self, cfg: Dict) -> Dict[str, Any]:
         """
-        从上次记录的 last_synced_commit 到当前默认分支 HEAD 做 compare，
+        从上次记录的 last_synced_commit 到当前监视分支 HEAD 做 compare，
+        分支见 watch_branch，未设置则用 GitHub 默认分支。
         摘要为按文件截断的 patch（hunk），节省 token。
         """
         out: Dict[str, Any] = {
@@ -709,11 +755,11 @@ Gist: {cfg.get("gist_url")}"""
             out["error"] = self._fmt_github_err(str(e), owner, repo)
             return out
 
-        default_branch = repo_info.get("default_branch") or "main"
+        branch = self._watch_branch(cfg, repo_info)
 
         try:
             commits = await client.get_commits(
-                owner, repo, limit=100, sha=default_branch
+                owner, repo, limit=100, sha=branch
             )
         except Exception as e:
             out["error"] = self._fmt_github_err(str(e), owner, repo)

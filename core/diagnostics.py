@@ -144,7 +144,7 @@ async def run_watcher_self_test(plugin: Any, user_id: str) -> List[TestStep]:
             owner, repo_name = plugin._parse_repo(repo_s)
             client = GitHubAPIClient(token)
             info = await client.get_repository_info(owner, repo_name)
-            branch = info.get("default_branch") or "main"
+            branch = plugin._watch_branch(cfg, info)
             commits = await client.get_commits(owner, repo_name, limit=1, sha=branch)
             head = (commits[0].get("sha") or "")[:7] if commits else "?"
             gh_ok = True

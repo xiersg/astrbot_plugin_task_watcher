@@ -224,19 +224,18 @@ class TaskWatcherPlugin(Star):
         self.user_configs[user_id]["taskbook_content"] = content
         self._save_configs()
 
-        yield event.plain_result("✅ Gist 已设置并下载原文。")
-        yield event.plain_result("🤖 正在首次 AI 编排为 YAML 任务书并写回 Gist…")
-
         cfg = self.user_configs[user_id]
+        lines = ["✅ Gist 已设置并下载原文。"]
         try:
             await self._organize_and_sync_gist(cfg)
-            yield event.plain_result(
-                "✅ 首次编排完成。可设置仓库后使用 /watcher check；也可随时 /watcher organize 重新编排。"
+            lines.append(
+                "✅ 首次 AI 编排完成。可设置仓库后使用 /watcher check；也可随时 /watcher organize 重新编排。"
             )
         except Exception as e:
-            yield event.plain_result(
+            lines.append(
                 f"⚠️ 自动编排失败（已保留 Gist 下载的原文）：{e}\n请配置好聊天模型后执行 /watcher organize"
             )
+        yield event.plain_result("\n".join(lines))
 
     @watcher_group.command("set_repo")
     async def cmd_set_repo(self, event: AstrMessageEvent, repo: str):
@@ -301,13 +300,11 @@ Git 同步进度: {sync_line}"""
             yield event.plain_result("❌ 请先设置 Gist: /watcher set_gist <url>")
             return
 
-        yield event.plain_result("正在重新编排任务书...")
-
         try:
             await self._organize_and_sync_gist(cfg)
-            yield event.plain_result("✅ 任务书已编排完成并同步到 Gist")
-            yield event.plain_result("下一步: /watcher check (全面检查)")
-
+            yield event.plain_result(
+                "✅ 任务书已编排完成并同步到 Gist\n下一步: /watcher check (全面检查)"
+            )
         except Exception as e:
             yield event.plain_result(f"❌ 编排失败: {e}")
 
@@ -321,8 +318,6 @@ Git 同步进度: {sync_line}"""
         if not cfg:
             yield event.plain_result("请先配置:\n1. /watcher set_token <token>\n2. /watcher set_gist <url>\n3. /watcher set_repo <repo>")
             return
-
-        yield event.plain_result("🔍 正在全面检查项目...")
 
         try:
             if not cfg.get("token") or not (cfg.get("repo") or "").strip():
@@ -416,8 +411,6 @@ Git 同步进度: {sync_line}"""
             yield event.plain_result("请先配置:\n1. /watcher set_token <token>\n2. /watcher set_gist <url>\n3. /watcher set_repo <repo>")
             return
 
-        yield event.plain_result("👀 监视代码变更...")
-
         try:
             if not cfg.get("token") or not (cfg.get("repo") or "").strip():
                 yield event.plain_result("需要 token 与 set_repo 后才能拉取变更。")
@@ -436,9 +429,9 @@ Git 同步进度: {sync_line}"""
             fc = int(changes.get("file_count") or 0)
             preview = (changes.get("summary_text") or "")[:3500]
             yield event.plain_result(
-                f"自上次记录起的增量：约 {fc} 个文件有 diff（hunk 已截断展示）。\n\n{preview}"
+                f"👀 自上次记录起的增量：约 {fc} 个文件有 diff（hunk 已截断展示）。\n\n{preview}"
+                "\n\n使用 /watcher check 写入任务书并推进同步进度。"
             )
-            yield event.plain_result("使用 /watcher check 写入任务书并推进同步进度。")
 
         except Exception as e:
             yield event.plain_result(f"❌ 监视失败: {e}")
@@ -573,8 +566,6 @@ Gist: {cfg.get("gist_url")}"""
                 "❌ 当前任务书不是有效 YAML v1。请先 /watcher organize 或 /watcher set_gist。"
             )
             return
-
-        yield event.plain_result("🤖 正在按说明编辑任务书（AI）…")
 
         try:
             raw_out = strip_fenced_markdown(

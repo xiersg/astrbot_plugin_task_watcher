@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -53,6 +54,18 @@ async def _http_get(url: str) -> tuple[int, str]:
     async with aiohttp.ClientSession(timeout=_HTTP_PROBE_TIMEOUT) as session:
         async with session.get(url) as resp:
             return resp.status, (await resp.text())[:300]
+
+
+async def _http_get_json(url: str) -> tuple[int, Optional[dict]]:
+    async with aiohttp.ClientSession(timeout=_HTTP_PROBE_TIMEOUT) as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return resp.status, None
+            try:
+                data = await resp.json(content_type=None)
+            except (json.JSONDecodeError, aiohttp.ContentTypeError, ValueError):
+                return resp.status, None
+            return resp.status, data if isinstance(data, dict) else None
 
 
 async def run_watcher_self_test(plugin: Any, user_id: str) -> List[TestStep]:
@@ -217,13 +230,17 @@ async def run_watcher_self_test(plugin: Any, user_id: str) -> List[TestStep]:
     else:
         try:
             url = f"http://127.0.0.1:{port}/api/taskbook?token={web_tok}"
-            status, body = await _http_get(url)
-            if status == 200 and '"ok": true' in body.replace(" ", "").lower():
-                add("HTTP taskbook API", True, "ok=true")
-            elif status == 401:
+            status, data = await _http_get_json(url)
+            if status == 401:
                 add("HTTP taskbook API", False, "invalid_token（会话与发 web 时不一致？）")
+            elif status == 200 and data and data.get("ok") is True:
+                src = data.get("source") or "?"
+                n = len(str(data.get("taskbook") or ""))
+                add("HTTP taskbook API", True, f"ok=true，source={src}，约 {n} 字")
+            elif status == 200:
+                add("HTTP taskbook API", False, f"JSON ok≠true: {str(data)[:80]}")
             else:
-                add("HTTP taskbook API", False, f"HTTP {status} {body[:80]}")
+                add("HTTP taskbook API", False, f"HTTP {status}")
         except Exception as e:
             add("HTTP taskbook API", False, str(e)[:160])
     steps[-1].elapsed_ms = int((time.perf_counter() - t0) * 1000)

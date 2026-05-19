@@ -4,6 +4,32 @@
 
 ---
 
+## v1.1.1 — 2026-05-19 21:50 +0800（发布）
+
+### 发布与元数据
+
+- 插件版本号提升至 **v1.1.1**（`metadata.yaml` 与 `@register` 对齐）。
+
+### 修复
+
+- **QQ / aiocqhttp 等适配器**：`check`、`watch`、`organize`、`set_gist`、`tasks_edit` 等在长时间 `await` 之前发送「进行中」提示会导致 AstrBot `after_message_sent` 终止事件管道，用户只能看到半句、后续逻辑不执行。现改为 **先完成处理再一次性回复**（与 `test` 相同策略）。
+- **隐藏自检 `/watcher test`**：同上，去掉「自检开始…」的提前 `yield`，避免只收到开头一句。
+- **自检第 8 步误报**：`/api/taskbook` 返回 HTTP 200 且 `ok: true` 时，因字符串匹配写错（去空格后仍匹配带空格的 `"ok": true`）被标为失败；改为 **JSON 解析** 判定。
+- **Docker 部署 Web**：容器内且 `web_server_host` 为回环地址时，自动改为监听 `0.0.0.0`，便于 `-p` 端口映射；可用环境变量 `TASKWATCHER_DISABLE_DOCKER_BIND_TWEAK=1` 关闭。
+
+### 新增命令与配置
+
+| 命令 | 说明 |
+|------|------|
+| `/watcher test` | **隐藏**自检（不出现在 `help`）：只读探测配置、YAML、GitHub、Gist、compare 摘要、Web HTTP；**不调用 AI**。 |
+| `/watcher set_branch [分支]` | 设置或清除监视分支；留空则恢复为 GitHub **默认分支**。 |
+| `/watcher set_repo <repo> [分支]` | 增加可选第二参数，设置仓库时一并指定分支。 |
+
+- 用户配置新增字段 **`watch_branch`**：未设置时行为与 v1.1.0 一致（跟随仓库默认分支）；`check` / `watch` / 自检均按该分支取 HEAD 与 compare。
+- `/watcher config` 输出中增加「监视分支」一行。
+
+---
+
 ## v1.1.0 — 2026-05-15 17:22 +0800（发布）
 
 ### 发布与元数据

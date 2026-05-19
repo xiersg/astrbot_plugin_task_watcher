@@ -25,6 +25,7 @@ from .core.github_client import GitHubAPIClient
 from .core.change_digest import format_compare_for_prompt
 from .core.taskbook_schema import count_tasks_in_tree, is_taskbook_yaml_v1_document
 from .core import prompts
+from .core.diagnostics import format_test_report, run_watcher_self_test
 from .core.web_server import (
     read_web_listen_config,
     strip_fenced_markdown,
@@ -69,7 +70,7 @@ def _instruction_after_tasks_edit_command(event: AstrMessageEvent) -> str:
     return ""
 
 
-@register("astrbot_plugin_task_watcher", "xiersg", "检测Git仓库变化，分析任务完成情况", "1.1.0")
+@register("astrbot_plugin_task_watcher", "xiersg", "检测Git仓库变化，分析任务完成情况", "1.1.1")
 class TaskWatcherPlugin(Star):
     """任务监听插件"""
 
@@ -133,6 +134,16 @@ class TaskWatcherPlugin(Star):
             return a.strip(), b.split("/")[0].strip()
         raise ValueError("仓库格式应为 owner/repo 或 https://github.com/owner/repo")
 
+    @staticmethod
+    def _watch_branch(cfg: Dict[str, Any], repo_info: Optional[Dict[str, Any]] = None) -> str:
+        """监视分支：配置 watch_branch 优先，否则用 GitHub 默认分支。"""
+        explicit = str(cfg.get("watch_branch") or "").strip()
+        if explicit:
+            return explicit
+        if repo_info:
+            return str(repo_info.get("default_branch") or "main")
+        return "main"
+
     # ============ 指令 ============
 
     @filter.command_group("watcher")
@@ -153,8 +164,10 @@ class TaskWatcherPlugin(Star):
 
 • /watcher set_gist <gist_url> - 设置任务书 Gist；下载后会 **自动 AI 编排为 YAML** 并写回 Gist（失败则保留原文，可再发 /watcher organize）
 
-• /watcher set_repo <repo> - 设置要监视的仓库
-  格式: 用户名/仓库名 (如: owner/repo)
+• /watcher set_repo <repo> [分支] - 设置要监视的仓库（分支可选，省略则用 GitHub 默认分支）
+  格式: owner/repo 或 owner/repo develop
+
+• /watcher set_branch [分支] - 单独设置/清除监视分支（留空清除，恢复默认分支）
 
 • /watcher config - 查看当前配置
 
@@ -223,23 +236,22 @@ class TaskWatcherPlugin(Star):
         self.user_configs[user_id]["taskbook_content"] = content
         self._save_configs()
 
-        yield event.plain_result("✅ Gist 已设置并下载原文。")
-        yield event.plain_result("🤖 正在首次 AI 编排为 YAML 任务书并写回 Gist…")
-
         cfg = self.user_configs[user_id]
+        lines = ["✅ Gist 已设置并下载原文。"]
         try:
             await self._organize_and_sync_gist(cfg)
-            yield event.plain_result(
-                "✅ 首次编排完成。可设置仓库后使用 /watcher check；也可随时 /watcher organize 重新编排。"
+            lines.append(
+                "✅ 首次 AI 编排完成。可设置仓库后使用 /watcher check；也可随时 /watcher organize 重新编排。"
             )
         except Exception as e:
-            yield event.plain_result(
+            lines.append(
                 f"⚠️ 自动编排失败（已保留 Gist 下载的原文）：{e}\n请配置好聊天模型后执行 /watcher organize"
             )
+        yield event.plain_result("\n".join(lines))
 
     @watcher_group.command("set_repo")
-    async def cmd_set_repo(self, event: AstrMessageEvent, repo: str):
-        """设置监视仓库: /watcher set_repo <repo>"""
+    async def cmd_set_repo(self, event: AstrMessageEvent, repo: str, branch: str = ""):
+        """设置监视仓库: /watcher set_repo <repo> [分支]"""
         event.stop_event()
         user_id = self._get_user_id(event)
         if not user_id:
@@ -257,8 +269,39 @@ class TaskWatcherPlugin(Star):
             self.user_configs[user_id] = {}
 
         self.user_configs[user_id]["repo"] = normalized
+        br = (branch or "").strip()
+        if br:
+            self.user_configs[user_id]["watch_branch"] = br
+        else:
+            self.user_configs[user_id].pop("watch_branch", None)
         self._save_configs()
-        yield event.plain_result(f"✅ 仓库已设置: {normalized}")
+        branch_line = (
+            f"监视分支: {br}" if br else "监视分支: GitHub 默认分支（未单独指定）"
+        )
+        yield event.plain_result(f"✅ 仓库已设置: {normalized}\n{branch_line}")
+
+    @watcher_group.command("set_branch")
+    async def cmd_set_branch(self, event: AstrMessageEvent, branch: str = ""):
+        """设置监视分支；留空则恢复 GitHub 默认分支"""
+        event.stop_event()
+        user_id = self._get_user_id(event)
+        if not user_id:
+            yield event.plain_result("无法获取用户ID")
+            return
+        if user_id not in self.user_configs:
+            self.user_configs[user_id] = {}
+        if not self.user_configs[user_id].get("repo"):
+            yield event.plain_result("请先 /watcher set_repo <owner/repo>")
+            return
+        br = (branch or "").strip()
+        if br:
+            self.user_configs[user_id]["watch_branch"] = br
+            msg = f"✅ 监视分支已设为: {br}"
+        else:
+            self.user_configs[user_id].pop("watch_branch", None)
+            msg = "✅ 已清除自定义分支，将使用 GitHub 默认分支"
+        self._save_configs()
+        yield event.plain_result(msg)
 
     @watcher_group.command("config")
     async def cmd_config(self, event: AstrMessageEvent):
@@ -277,8 +320,10 @@ class TaskWatcherPlugin(Star):
             if sha
             else "未记录（首次 /watcher check 成功后会记下当前 HEAD）"
         )
+        watch_br = (cfg.get("watch_branch") or "").strip() or "（GitHub 默认分支）"
         text = f"""📋 配置信息
 仓库: {cfg.get('repo')}
+监视分支: {watch_br}
 Gist: {cfg.get('gist_url')}
 Token: {'✅ 已设置' if cfg.get('token') else '❌ 未设置'}
 上次检查: {cfg.get('last_check', '从未')}
@@ -300,13 +345,11 @@ Git 同步进度: {sync_line}"""
             yield event.plain_result("❌ 请先设置 Gist: /watcher set_gist <url>")
             return
 
-        yield event.plain_result("正在重新编排任务书...")
-
         try:
             await self._organize_and_sync_gist(cfg)
-            yield event.plain_result("✅ 任务书已编排完成并同步到 Gist")
-            yield event.plain_result("下一步: /watcher check (全面检查)")
-
+            yield event.plain_result(
+                "✅ 任务书已编排完成并同步到 Gist\n下一步: /watcher check (全面检查)"
+            )
         except Exception as e:
             yield event.plain_result(f"❌ 编排失败: {e}")
 
@@ -320,8 +363,6 @@ Git 同步进度: {sync_line}"""
         if not cfg:
             yield event.plain_result("请先配置:\n1. /watcher set_token <token>\n2. /watcher set_gist <url>\n3. /watcher set_repo <repo>")
             return
-
-        yield event.plain_result("🔍 正在全面检查项目...")
 
         try:
             if not cfg.get("token") or not (cfg.get("repo") or "").strip():
@@ -415,8 +456,6 @@ Git 同步进度: {sync_line}"""
             yield event.plain_result("请先配置:\n1. /watcher set_token <token>\n2. /watcher set_gist <url>\n3. /watcher set_repo <repo>")
             return
 
-        yield event.plain_result("👀 监视代码变更...")
-
         try:
             if not cfg.get("token") or not (cfg.get("repo") or "").strip():
                 yield event.plain_result("需要 token 与 set_repo 后才能拉取变更。")
@@ -435,9 +474,9 @@ Git 同步进度: {sync_line}"""
             fc = int(changes.get("file_count") or 0)
             preview = (changes.get("summary_text") or "")[:3500]
             yield event.plain_result(
-                f"自上次记录起的增量：约 {fc} 个文件有 diff（hunk 已截断展示）。\n\n{preview}"
+                f"👀 自上次记录起的增量：约 {fc} 个文件有 diff（hunk 已截断展示）。\n\n{preview}"
+                "\n\n使用 /watcher check 写入任务书并推进同步进度。"
             )
-            yield event.plain_result("使用 /watcher check 写入任务书并推进同步进度。")
 
         except Exception as e:
             yield event.plain_result(f"❌ 监视失败: {e}")
@@ -526,6 +565,20 @@ Gist: {cfg.get("gist_url")}"""
             url + "\n（已轮换 token，旧书签失效）" + (f"\n\n{hint}" if hint else "")
         )
 
+    @watcher_group.command("test")
+    async def cmd_test(self, event: AstrMessageEvent):
+        """隐藏自检：只读探测配置/GitHub/Gist/Web，不调用 AI（不出现在 help）。"""
+        event.stop_event()
+        user_id = self._get_user_id(event)
+        try:
+            # 勿在 await 前 yield：AstrBot 首条回复后会 after_message_sent 终止管道（QQ 等仅见半句）
+            steps = await run_watcher_self_test(self, user_id)
+            chunks = format_test_report(user_id, steps)
+            yield event.plain_result("\n\n".join(chunks))
+        except Exception as e:
+            logger.exception("watcher test")
+            yield event.plain_result(f"❌ 自检异常: {e}")
+
     @watcher_group.command("tasks_edit", alias={"任务书编辑", "编辑任务"})
     async def cmd_tasks_edit(self, event: AstrMessageEvent):
         """AI 按自然语言增删 YAML 任务点并写回 Gist"""
@@ -558,8 +611,6 @@ Gist: {cfg.get("gist_url")}"""
                 "❌ 当前任务书不是有效 YAML v1。请先 /watcher organize 或 /watcher set_gist。"
             )
             return
-
-        yield event.plain_result("🤖 正在按说明编辑任务书（AI）…")
 
         try:
             raw_out = strip_fenced_markdown(
@@ -675,7 +726,8 @@ Gist: {cfg.get("gist_url")}"""
 
     async def _get_repo_changes(self, cfg: Dict) -> Dict[str, Any]:
         """
-        从上次记录的 last_synced_commit 到当前默认分支 HEAD 做 compare，
+        从上次记录的 last_synced_commit 到当前监视分支 HEAD 做 compare，
+        分支见 watch_branch，未设置则用 GitHub 默认分支。
         摘要为按文件截断的 patch（hunk），节省 token。
         """
         out: Dict[str, Any] = {
@@ -703,11 +755,11 @@ Gist: {cfg.get("gist_url")}"""
             out["error"] = self._fmt_github_err(str(e), owner, repo)
             return out
 
-        default_branch = repo_info.get("default_branch") or "main"
+        branch = self._watch_branch(cfg, repo_info)
 
         try:
             commits = await client.get_commits(
-                owner, repo, limit=100, sha=default_branch
+                owner, repo, limit=100, sha=branch
             )
         except Exception as e:
             out["error"] = self._fmt_github_err(str(e), owner, repo)

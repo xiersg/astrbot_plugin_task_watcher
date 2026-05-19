@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -27,14 +28,35 @@ def _plugin_cfg_dict(config_obj: Any) -> dict[str, Any]:
         return {}
 
 
+def _in_docker_env() -> bool:
+    if os.environ.get("TASKWATCHER_DISABLE_DOCKER_BIND_TWEAK", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        return False
+    try:
+        return Path("/.dockerenv").is_file()
+    except OSError:
+        return False
+
+
 def read_web_listen_config(config_obj: Any) -> tuple[str, int]:
     """从 AstrBot 插件配置读取 Web 监听地址与端口（端口<=0 表示不启用）。"""
     cfg = _plugin_cfg_dict(config_obj)
-    host = str(cfg.get("web_server_host") or "127.0.0.1")
+    host = str(cfg.get("web_server_host") or "127.0.0.1").strip()
     try:
         port = int(cfg.get("web_server_port") or 0)
     except (TypeError, ValueError):
         port = 0
+    if port > 0 and host.lower() in ("127.0.0.1", "localhost", "::1") and _in_docker_env():
+        logger.warning(
+            "TaskWatcher: Docker 环境且 web_server_host 为回环地址，已自动改为监听 0.0.0.0:%s，"
+            "以便宿主机 -p 端口映射生效。若需保持仅回环，请设置环境变量 "
+            "TASKWATCHER_DISABLE_DOCKER_BIND_TWEAK=1 并在插件配置中显式指定 host。",
+            port,
+        )
+        host = "0.0.0.0"
     return host, port
 
 
@@ -101,6 +123,10 @@ class TaskWatcherWebServer:
         self._runner: Optional[web.AppRunner] = None
         self._site: Optional[web.TCPSite] = None
         self._started = False
+
+    @property
+    def is_started(self) -> bool:
+        return self._started
 
     @property
     def static_dir(self) -> Path:

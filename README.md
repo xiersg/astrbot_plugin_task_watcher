@@ -15,7 +15,8 @@
 | `/watcher help` | 帮助 |
 | `/watcher set_token <token>` | GitHub Token（gist + 私有库需 repo） |
 | `/watcher set_gist <url>` | 绑定 Gist；下载后 **自动 AI 编排为 YAML** 并写回 |
-| `/watcher set_repo <repo>` | 监视仓库 `owner/repo` |
+| `/watcher set_repo <repo> [分支]` | 监视仓库；分支可选，省略则用 GitHub **默认分支** |
+| `/watcher set_branch [分支]` | 单独设置/清除监视分支（留空=恢复默认分支） |
 | `/watcher organize` | 手动再次 AI 编排任务书并同步 Gist |
 | `/watcher tasks_edit <说明>` | AI 按自然语言增删/调整任务点（别名：`任务书编辑`、`编辑任务`） |
 | `/watcher check` | 拉取新提交 → 分析 → 更新任务书 YAML |
